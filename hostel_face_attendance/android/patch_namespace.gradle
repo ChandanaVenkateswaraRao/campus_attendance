@@ -1,0 +1,24 @@
+subprojects {
+    afterEvaluate { project ->
+        if (project.hasProperty('android')) {
+            project.android {
+                if (namespace == null) {
+                    namespace project.group
+                }
+                compileSdkVersion 36
+                compileOptions {
+                    sourceCompatibility JavaVersion.VERSION_17
+                    targetCompatibility JavaVersion.VERSION_17
+                }
+            }
+        }
+        
+        project.tasks.configureEach { task ->
+            if (task.name.contains("compile") && task.name.contains("Kotlin")) {
+                task.kotlinOptions {
+                    jvmTarget = "17"
+                }
+            }
+        }
+    }
+}

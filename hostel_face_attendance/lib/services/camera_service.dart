@@ -6,21 +6,55 @@ class CameraService {
   
   CameraController? get controller => _controller;
 
-  Future<void> initialize() async {
-    final cameras = await availableCameras();
-    final frontCamera = cameras.firstWhere(
-      (camera) => camera.lensDirection == CameraLensDirection.front,
-      orElse: () => cameras.first,
-    );
+  List<CameraDescription> _cameras = [];
+  int _cameraIndex = 0;
 
+  Future<void> initialize() async {
+    _cameras = await availableCameras();
+    _cameraIndex = _cameras.indexWhere((c) => c.lensDirection == CameraLensDirection.front);
+    if (_cameraIndex == -1 && _cameras.isNotEmpty) _cameraIndex = 0;
+    
+    await _initCamera(_cameras[_cameraIndex]);
+  }
+
+  Future<void> _initCamera(CameraDescription camera) async {
     _controller = CameraController(
-      frontCamera,
-      ResolutionPreset.medium,
+      camera,
+      ResolutionPreset.high,
       enableAudio: false,
       imageFormatGroup: ImageFormatGroup.yuv420,
     );
-
     await _controller!.initialize();
+  }
+
+  bool get isFrontCamera => _cameras.isNotEmpty && _cameras[_cameraIndex].lensDirection == CameraLensDirection.front;
+  int get sensorOrientation => _cameras.isNotEmpty ? _cameras[_cameraIndex].sensorOrientation : 90;
+
+  Future<void> switchCamera(Function(CameraImage) onImage) async {
+    if (_cameras.length < 2) return;
+    
+    final wasStreaming = _controller?.value.isStreamingImages ?? false;
+    await _controller?.dispose();
+    
+    _cameraIndex = (_cameraIndex + 1) % _cameras.length;
+    await _initCamera(_cameras[_cameraIndex]);
+    
+    if (wasStreaming) {
+      startImageStream(onImage);
+    }
+  }
+
+  Future<void> setZoom(double zoom) async {
+    if (_controller != null) {
+      try {
+        final maxZoom = await _controller!.getMaxZoomLevel();
+        final minZoom = await _controller!.getMinZoomLevel();
+        final clamped = zoom.clamp(minZoom, maxZoom);
+        await _controller!.setZoomLevel(clamped);
+      } catch (e) {
+        debugPrint('Error setting zoom: $e');
+      }
+    }
   }
 
   void startImageStream(Function(CameraImage) onImage) {

@@ -2,14 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:isar/isar.dart';
 import '../services/camera_service.dart';
-import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import '../services/ml_isolate_worker.dart';
 import '../models/models.dart';
 import 'face_painter.dart';
 
 class RegistrationScreen extends StatefulWidget {
   final Isar isar;
-  const RegistrationScreen({super.key, required this.isar});
+  final Room room;
+  const RegistrationScreen({super.key, required this.isar, required this.room});
 
   @override
   State<RegistrationScreen> createState() => _RegistrationScreenState();
@@ -26,10 +26,10 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
   int _capturedAngles = 0;
   final int _requiredAngles = 3;
+  double _zoomLevel = 1.0;
   
   final _nameController = TextEditingController();
   final _regNoController = TextEditingController();
-  final _roomController = TextEditingController();
 
   final List<List<double>> _capturedEmbeddings = [];
 
@@ -39,6 +39,17 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     _initCamera();
   }
 
+  void _processFrame(CameraImage image) async {
+    final faces = await _mlWorker.processImage(image, _cameraService.sensorOrientation);
+    if (mounted) {
+      setState(() {
+        _faces = faces;
+        _imageSize = Size(image.width.toDouble(), image.height.toDouble());
+        _faceDetected = faces.isNotEmpty;
+      });
+    }
+  }
+
   Future<void> _initCamera() async {
     await _mlWorker.init();
     await _cameraService.initialize();
@@ -46,21 +57,12 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       setState(() {
         _isInitializing = false;
       });
-      _cameraService.startImageStream((image) async {
-        final faces = await _mlWorker.processImage(image);
-        if (mounted) {
-          setState(() {
-            _faces = faces;
-            _imageSize = Size(image.width.toDouble(), image.height.toDouble());
-            _faceDetected = faces.isNotEmpty;
-          });
-        }
-      });
+      _cameraService.startImageStream(_processFrame);
     }
   }
 
   Future<void> _captureAngle() async {
-    if (_nameController.text.isEmpty || _regNoController.text.isEmpty || _roomController.text.isEmpty) {
+    if (_nameController.text.isEmpty || _regNoController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please fill all details first!')),
       );
@@ -94,26 +96,17 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   }
 
   Future<void> _saveStudentToDatabase() async {
-    final roomName = _roomController.text.trim();
-    
     await widget.isar.writeTxn(() async {
-      // 1. Find or create the room
-      var room = await widget.isar.rooms.filter().nameEqualTo(roomName).findFirst();
-      if (room == null) {
-        room = Room()..name = roomName;
-        await widget.isar.rooms.put(room);
-      }
-
-      // 2. Create the student
+      // 1. Create the student
       final student = Student()
         ..name = _nameController.text.trim()
         ..studentId = _regNoController.text.trim();
       
-      student.room.value = room;
+      student.room.value = widget.room;
       await widget.isar.students.put(student);
       await student.room.save();
 
-      // 3. Save their embeddings
+      // 2. Save their embeddings
       for (var vec in _capturedEmbeddings) {
         final embedding = FaceEmbedding()..vector = vec;
         embedding.student.value = student;
@@ -130,7 +123,6 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     _cameraService.dispose();
     _nameController.dispose();
     _regNoController.dispose();
-    _roomController.dispose();
     super.dispose();
   }
 
@@ -141,95 +133,226 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     }
 
     return Scaffold(
+      backgroundColor: Colors.grey.shade100,
       appBar: AppBar(
-        title: const Text('Register Student'),
-        backgroundColor: Colors.blueAccent,
+        title: const Text('Register Student', style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: true,
       ),
-      body: Column(
-        children: [
-          // Registration Form
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              children: [
-                TextField(
-                  controller: _nameController,
-                  decoration: const InputDecoration(labelText: 'Student Name', border: OutlineInputBorder()),
+      body: SafeArea(
+        child: Column(
+          children: [
+            // Modern Registration Form
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 10),
-                Row(
+                padding: const EdgeInsets.all(20.0),
+                child: Column(
                   children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _regNoController,
-                        decoration: const InputDecoration(labelText: 'Register Number', border: OutlineInputBorder()),
+                    Row(
+                      children: [
+                        const Icon(Icons.meeting_room, color: Colors.blueAccent),
+                        const SizedBox(width: 8),
+                        Text('Room: ${widget.room.name}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _nameController,
+                      decoration: InputDecoration(
+                        labelText: 'Student Name',
+                        prefixIcon: const Icon(Icons.person_outline),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        filled: true,
+                        fillColor: Colors.grey.shade50,
                       ),
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: TextField(
-                        controller: _roomController,
-                        decoration: const InputDecoration(labelText: 'Room Number', border: OutlineInputBorder()),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _regNoController,
+                      decoration: InputDecoration(
+                        labelText: 'Register Number',
+                        prefixIcon: const Icon(Icons.badge_outlined),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        filled: true,
+                        fillColor: Colors.grey.shade50,
                       ),
                     ),
                   ],
                 ),
-              ],
+              ),
             ),
-          ),
-          
-          // Camera Preview
-          Expanded(
-            child: Stack(
-              children: [
-                SizedBox.expand(
-                  child: CameraPreview(_cameraService.controller!),
-                ),
-                if (_faces.isNotEmpty && _imageSize != null)
-                  SizedBox.expand(
-                    child: CustomPaint(
-                      painter: FacePainter(
-                        faces: _faces.map((e) => e.face).toList(),
-                        imageSize: _imageSize!,
-                        isFrontCamera: true, // front camera by default
-                      ),
-                    ),
-                  ),
-                Positioned(
-                  bottom: 20,
-                  left: 20,
-                  right: 20,
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.black54,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'Capture multiple angles\n($_capturedAngles/$_requiredAngles completed)',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(color: Colors.white, fontSize: 18),
-                        ),
-                        const SizedBox(height: 20),
-                        ElevatedButton(
-                          onPressed: _captureAngle,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue,
-                            padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
+            
+            // Camera Preview
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(24),
+                  child: Stack(
+                    children: [
+                      // The camera feed and bounding boxes
+                      SizedBox.expand(
+                        child: FittedBox(
+                          fit: BoxFit.cover,
+                          child: SizedBox(
+                            width: _cameraService.controller!.value.previewSize?.height ?? 1080,
+                            height: _cameraService.controller!.value.previewSize?.width ?? 1920,
+                            child: Stack(
+                              children: [
+                                SizedBox.expand(
+                                  child: CameraPreview(_cameraService.controller!),
+                                ),
+                                if (_faces.isNotEmpty && _imageSize != null)
+                                  SizedBox.expand(
+                                    child: CustomPaint(
+                                      painter: FacePainter(
+                                        faces: _faces.map((e) => e.face).toList(),
+                                        imageSize: _imageSize!,
+                                        isFrontCamera: _cameraService.isFrontCamera,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
                           ),
-                          child: const Text('Capture Frame', style: TextStyle(color: Colors.white)),
                         ),
-                      ],
-                    ),
+                      ),
+                      // Camera Switch Button
+                      Positioned(
+                        top: 16,
+                        right: 16,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.5),
+                            shape: BoxShape.circle,
+                          ),
+                          child: IconButton(
+                            icon: const Icon(Icons.cameraswitch, color: Colors.white, size: 28),
+                            onPressed: () async {
+                              await _cameraService.switchCamera(_processFrame);
+                              setState(() {});
+                            },
+                          ),
+                        ),
+                      ),
+                      
+                      // Modern Horizontal Zoom Bar
+                      Positioned(
+                        bottom: 160, // Just above the capture button overlay
+                        left: 0,
+                        right: 0,
+                        child: Center(
+                          child: Container(
+                            width: 240,
+                            height: 48,
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.6),
+                              borderRadius: BorderRadius.circular(24),
+                            ),
+                            child: Row(
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.zoom_out, color: Colors.white, size: 20),
+                                  onPressed: () {
+                                    double newZoom = (_zoomLevel - 0.5).clamp(1.0, 5.0);
+                                    setState(() => _zoomLevel = newZoom);
+                                    _cameraService.setZoom(newZoom);
+                                  },
+                                ),
+                                Expanded(
+                                  child: SliderTheme(
+                                    data: SliderTheme.of(context).copyWith(
+                                      trackHeight: 2,
+                                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
+                                      overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
+                                      activeTrackColor: Colors.white,
+                                      inactiveTrackColor: Colors.white30,
+                                      thumbColor: Colors.white,
+                                    ),
+                                    child: Slider(
+                                      value: _zoomLevel,
+                                      min: 1.0,
+                                      max: 5.0,
+                                      onChanged: (val) {
+                                        setState(() => _zoomLevel = val);
+                                        _cameraService.setZoom(val);
+                                      },
+                                    ),
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.zoom_in, color: Colors.white, size: 20),
+                                  onPressed: () {
+                                    double newZoom = (_zoomLevel + 0.5).clamp(1.0, 5.0);
+                                    setState(() => _zoomLevel = newZoom);
+                                    _cameraService.setZoom(newZoom);
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        bottom: 20,
+                        left: 20,
+                        right: 20,
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.7),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'Capture multiple angles\n($_capturedAngles/$_requiredAngles completed)',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 16),
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton.icon(
+                                  onPressed: _captureAngle,
+                                  icon: const Icon(Icons.camera),
+                                  label: const Text('Capture Frame'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.blueAccent,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(vertical: 16),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    ],
                   ),
-                )
-              ],
+                ),
+              ),
             ),
-          ),
-        ],
+            const SizedBox(height: 20),
+          ],
+        ),
       ),
     );
   }

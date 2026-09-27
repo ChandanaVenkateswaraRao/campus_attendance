@@ -31,7 +31,7 @@ class MlWorker {
     await _recognitionService.loadModel();
   }
 
-  Future<List<FaceWithEmbedding>> processImage(CameraImage image) async {
+  Future<List<FaceWithEmbedding>> processImage(CameraImage image, int sensorOrientation) async {
     if (_isProcessing) return [];
     _isProcessing = true;
 
@@ -80,7 +80,7 @@ class MlWorker {
       }
       
       final imageSize = Size(width.toDouble(), height.toDouble());
-      final imageRotation = InputImageRotation.rotation270deg;
+      final imageRotation = InputImageRotationValue.fromRawValue(sensorOrientation) ?? InputImageRotation.rotation90deg;
 
       final metadata = InputImageMetadata(
         size: imageSize,
@@ -96,7 +96,7 @@ class MlWorker {
       List<FaceWithEmbedding> results = [];
       for (var face in faces) {
         // Crop and run TFLite
-        final rgbMatrix = _recognitionService.preprocessImage(bytes, width, height, face);
+        final rgbMatrix = _recognitionService.preprocessImage(bytes, width, height, face, sensorOrientation);
         List<double>? embedding;
         if (rgbMatrix != null) {
           embedding = _recognitionService.getEmbedding(rgbMatrix);

@@ -26,7 +26,7 @@ class FaceRecognitionService {
 
   /// Converts an NV21 byte array to a cropped, resized 112x112 RGB matrix
   List<List<List<double>>>? preprocessImage(
-      Uint8List nv21Bytes, int width, int height, Face face) {
+      Uint8List nv21Bytes, int width, int height, Face face, int sensorOrientation) {
     if (_interpreter == null) {
       debugPrint('Interpreter is null!');
       return null;
@@ -36,9 +36,8 @@ class FaceRecognitionService {
       // 1. Convert NV21 to RGB Image
       final rgbImage = _nv21ToRgb(nv21Bytes, width, height);
       
-      // Android front camera portrait is rotated 270 degrees clockwise.
-      // We must rotate the raw image so the coordinate space matches ML Kit's bounding boxes.
-      final rotatedImage = img.copyRotate(rgbImage, angle: 270);
+      // Rotate the raw image based on the sensor orientation
+      final rotatedImage = img.copyRotate(rgbImage, angle: sensorOrientation);
 
       // 2. Crop to bounding box
       final box = face.boundingBox;

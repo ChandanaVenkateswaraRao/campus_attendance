@@ -80,12 +80,25 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: Colors.grey.shade100,
       appBar: AppBar(
-        title: const Text('Hostel Attendance', style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
+        leading: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Container(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+            ),
+            padding: const EdgeInsets.all(2.0),
+            child: Image.asset('assets/images/logo.png', fit: BoxFit.contain),
+          ),
+        ),
+        title: const Text('Hostel Attendance', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        elevation: 2,
+        iconTheme: const IconThemeData(color: Colors.white),
         centerTitle: true,
         actions: [
           PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, color: Colors.white),
             onSelected: (value) async {
               if (value == 'profile') {
                 _showProfile();
@@ -226,39 +239,35 @@ class _HomeScreenState extends State<HomeScreen> {
     required Color color,
     required VoidCallback onTap,
   }) {
+    final primaryColor = Theme.of(context).colorScheme.primary;
+    
     return GestureDetector(
       onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-              color: color.withOpacity(0.15),
-              blurRadius: 20,
-              offset: const Offset(0, 8),
-            ),
-          ],
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey.shade300, width: 1),
         ),
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(20),
         child: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(16),
+                color: primaryColor.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(8),
               ),
-              child: Icon(icon, size: 32, color: color),
+              child: Icon(icon, size: 28, color: primaryColor),
             ),
-            const SizedBox(width: 20),
+            const SizedBox(width: 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     title,
-                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 4),
                   Text(

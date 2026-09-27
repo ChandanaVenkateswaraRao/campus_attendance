@@ -12,6 +12,27 @@ class SyncService {
 
   SyncService(this.isar);
 
+  Future<List<dynamic>> fetchAttendanceHistory(DateTime date) async {
+    final token = await AuthService().getToken();
+    if (token == null) throw Exception('Not logged in');
+
+    // Format date as YYYY-MM-DD
+    final dateString = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+    
+    final response = await http.get(
+      Uri.parse('http://10.2.8.142:3000/api/attendance?date=$dateString'),
+      headers: {'Authorization': 'Bearer $token'},
+    ).timeout(const Duration(seconds: 10));
+
+    if (response.statusCode == 200) {
+      final List<dynamic> data = jsonDecode(response.body);
+      print('Fetched ${data.length} records from server.');
+      return data;
+    } else {
+      throw Exception('Failed to fetch history: ${response.statusCode}');
+    }
+  }
+
   Future<void> syncPendingRecords() async {
     final pendingRecords = await isar.attendanceRecords
         .filter()
@@ -81,7 +102,11 @@ class SyncService {
           'id': s.id,
           'name': s.name,
           'studentId': s.studentId,
-          'room_local_id': s.room.value?.id
+          'room_local_id': s.room.value?.id,
+          'phoneNumber': s.phoneNumber,
+          'fatherPhoneNumber': s.fatherPhoneNumber,
+          'motherPhoneNumber': s.motherPhoneNumber,
+          'email': s.email
         };
       }).toList(),
       'faceEmbeddings': faceEmbeddings.map((f) {
@@ -134,7 +159,11 @@ class SyncService {
           final student = Student()
             ..id = s['local_id']
             ..name = s['name']
-            ..studentId = s['studentId'];
+            ..studentId = s['studentId']
+            ..phoneNumber = s['phoneNumber']
+            ..fatherPhoneNumber = s['fatherPhoneNumber']
+            ..motherPhoneNumber = s['motherPhoneNumber']
+            ..email = s['email'];
           return MapEntry(s, student);
         }).toList();
         

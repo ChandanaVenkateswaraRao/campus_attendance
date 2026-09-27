@@ -7,6 +7,7 @@ import '../services/object_tracker.dart';
 import '../models/models.dart';
 import '../services/ml_isolate_worker.dart';
 import 'face_painter.dart';
+import 'widgets/camera_zoom_control.dart';
 import 'dart:math' as math;
 
 class AttendanceScreen extends StatefulWidget {
@@ -32,6 +33,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   final Map<int, List<FaceEmbedding>> _studentEmbeddings = {};
   final Map<int, double> _studentMaxSimilarity = {};
   double _zoomLevel = 1.0;
+  double _sheetExtent = 0.35;
 
   AttendanceRecord? _existingRecord;
 
@@ -277,169 +279,164 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             ),
           ),
           
-          // Modern UI Overlay for Expected Students and Zoom Bar
+          // Zoom Bar above the bottom sheet
           Positioned(
-            bottom: 0,
+            bottom: MediaQuery.of(context).size.height * _sheetExtent + 16,
             left: 0,
             right: 0,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Modern Horizontal Zoom Bar
-                Container(
-                  width: 240,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.6),
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                  child: Row(
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.zoom_out, color: Colors.white, size: 20),
-                        onPressed: () {
-                          double newZoom = (_zoomLevel - 0.5).clamp(1.0, 5.0);
-                          setState(() => _zoomLevel = newZoom);
-                          _cameraService.setZoom(newZoom);
-                        },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 40.0),
+              child: CameraZoomControl(
+                currentZoom: _zoomLevel,
+                minZoom: 1.0,
+                maxZoom: 5.0,
+                onZoomChanged: (newZoom) {
+                  setState(() => _zoomLevel = newZoom);
+                  _cameraService.setZoom(newZoom);
+                },
+              ),
+            ),
+          ),
+          
+          // Draggable Bottom Sheet Overlay
+          NotificationListener<DraggableScrollableNotification>(
+            onNotification: (notification) {
+              setState(() {
+                _sheetExtent = notification.extent;
+              });
+              return true;
+            },
+            child: DraggableScrollableSheet(
+              initialChildSize: 0.35,
+              minChildSize: 0.15,
+              maxChildSize: 0.8,
+              builder: (context, scrollController) {
+                return ClipRRect(
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.70),
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+                        border: Border(top: BorderSide(color: Colors.white.withOpacity(0.5), width: 1.5)),
                       ),
-                      Expanded(
-                        child: SliderTheme(
-                          data: SliderTheme.of(context).copyWith(
-                            trackHeight: 2,
-                            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
-                            overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
-                            activeTrackColor: Colors.white,
-                            inactiveTrackColor: Colors.white30,
-                            thumbColor: Colors.white,
+                      child: CustomScrollView(
+                        controller: scrollController,
+                        slivers: [
+                          SliverToBoxAdapter(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                // Drag handle
+                                Center(
+                                  child: Container(
+                                    margin: const EdgeInsets.only(top: 12, bottom: 8),
+                                    height: 5,
+                                    width: 40,
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey.withOpacity(0.5),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                  ),
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      const Text('Expected Students', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                                      Text(
+                                        '${_attendanceStatus.values.where((v) => v).length} / ${_expectedStudents.length}',
+                                        style: TextStyle(fontSize: 16, color: Colors.grey.shade700, fontWeight: FontWeight.bold),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const Divider(),
+                              ],
+                            ),
                           ),
-                          child: Slider(
-                            value: _zoomLevel,
-                            min: 1.0,
-                            max: 5.0,
-                            onChanged: (val) {
-                              setState(() => _zoomLevel = val);
-                              _cameraService.setZoom(val);
-                            },
-                          ),
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.zoom_in, color: Colors.white, size: 20),
-                        onPressed: () {
-                          double newZoom = (_zoomLevel + 0.5).clamp(1.0, 5.0);
-                          setState(() => _zoomLevel = newZoom);
-                          _cameraService.setZoom(newZoom);
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                
-                // Bottom Sheet Overlay
-                ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                child: Container(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.70),
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('Expected Students', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                          Text(
-                            '${_attendanceStatus.values.where((v) => v).length} / ${_expectedStudents.length}',
-                            style: TextStyle(fontSize: 16, color: Colors.grey.shade700, fontWeight: FontWeight.bold),
+                          if (_expectedStudents.isEmpty)
+                            SliverToBoxAdapter(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 20.0),
+                                child: Center(child: Text('No students registered in this room.', style: TextStyle(color: Colors.grey.shade600))),
+                              ),
+                            )
+                          else
+                            SliverPadding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              sliver: SliverList(
+                                delegate: SliverChildBuilderDelegate(
+                                  (context, index) {
+                                    final student = _expectedStudents[index];
+                                    final isPresent = _attendanceStatus[student.id] ?? false;
+                                    final maxSim = _studentMaxSimilarity[student.id] ?? 0.0;
+                                    return Container(
+                                      margin: const EdgeInsets.only(bottom: 12),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(16),
+                                        boxShadow: [
+                                          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
+                                        ],
+                                      ),
+                                      child: ListTile(
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                        leading: Container(
+                                          padding: const EdgeInsets.all(8),
+                                          decoration: BoxDecoration(
+                                            color: isPresent ? Colors.green.withOpacity(0.1) : Colors.grey.withOpacity(0.1),
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: Icon(
+                                            isPresent ? Icons.check_circle_rounded : Icons.pending_rounded,
+                                            color: isPresent ? Colors.green : Colors.grey,
+                                          ),
+                                        ),
+                                        title: Text(student.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                        subtitle: Text('${student.studentId} | Score: ${(maxSim * 100).toStringAsFixed(1)}%'),
+                                        trailing: Switch(
+                                          value: isPresent,
+                                          activeColor: Colors.green,
+                                          onChanged: (val) {
+                                            setState(() {
+                                              _attendanceStatus[student.id] = val;
+                                            });
+                                          },
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                  childCount: _expectedStudents.length,
+                                ),
+                              ),
+                            ),
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                              child: ElevatedButton.icon(
+                                onPressed: _submitAttendance,
+                                icon: const Icon(Icons.check),
+                                label: const Text('Complete Room', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.green,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 16),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                ),
+                              ),
+                            ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 16),
-                      ConstrainedBox(
-                        constraints: BoxConstraints(
-                          maxHeight: MediaQuery.of(context).size.height * 0.20,
-                        ),
-                        child: SingleChildScrollView(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              if (_expectedStudents.isEmpty) 
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 20.0),
-                                  child: Text('No students registered in this room.', style: TextStyle(color: Colors.grey.shade600)),
-                                ),
-                              ..._expectedStudents.map((student) {
-                                final isPresent = _attendanceStatus[student.id] ?? false;
-                                final maxSim = _studentMaxSimilarity[student.id] ?? 0.0;
-                                return Container(
-                                  margin: const EdgeInsets.only(bottom: 12),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(16),
-                                    boxShadow: [
-                                      BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
-                                    ],
-                                  ),
-                                  child: ListTile(
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                    leading: Container(
-                                      padding: const EdgeInsets.all(8),
-                                      decoration: BoxDecoration(
-                                        color: isPresent ? Colors.green.withOpacity(0.1) : Colors.grey.withOpacity(0.1),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: Icon(
-                                        isPresent ? Icons.check_circle_rounded : Icons.pending_rounded,
-                                        color: isPresent ? Colors.green : Colors.grey,
-                                      ),
-                                    ),
-                                    title: Text(student.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                                    subtitle: Text('${student.studentId} | Score: ${(maxSim * 100).toStringAsFixed(1)}%'),
-                                    trailing: Switch(
-                                      value: isPresent,
-                                      activeColor: Colors.green,
-                                      onChanged: (val) {
-                                        // Manual override for testing
-                                        setState(() {
-                                          _attendanceStatus[student.id] = val;
-                                        });
-                                      },
-                                    ),
-                                  ),
-                                );
-                              }),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      ElevatedButton.icon(
-                        onPressed: _submitAttendance,
-                        icon: const Icon(Icons.check),
-                        label: const Text('Complete Room', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        ),
-                      )
-                    ],
+                    ),
                   ),
-                  ),
-                ),
-              ),
-            ],
+                );
+              },
+            ),
           ),
-        ),
       ],
     ),
   );

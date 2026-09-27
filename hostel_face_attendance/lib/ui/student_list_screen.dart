@@ -85,9 +85,18 @@ class _StudentListScreenState extends State<StudentListScreen> {
                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
                     ),
                     subtitle: Text('ID: ${student.studentId}'),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                      onPressed: () => _confirmDelete(student),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.edit_outlined, color: Colors.blueAccent),
+                          onPressed: () => _showEditDialog(student),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                          onPressed: () => _confirmDelete(student),
+                        ),
+                      ],
                     ),
                   ),
                 );
@@ -144,5 +153,58 @@ class _StudentListScreenState extends State<StudentListScreen> {
       );
       _loadStudents(); // Refresh the list
     }
+  }
+
+  Future<void> _showEditDialog(Student student) async {
+    final nameCtrl = TextEditingController(text: student.name);
+    final regCtrl = TextEditingController(text: student.studentId);
+    final phoneCtrl = TextEditingController(text: student.phoneNumber);
+    final fatherPhoneCtrl = TextEditingController(text: student.fatherPhoneNumber);
+    final motherPhoneCtrl = TextEditingController(text: student.motherPhoneNumber);
+    final emailCtrl = TextEditingController(text: student.email);
+
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Student Details'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Name')),
+              TextField(controller: regCtrl, decoration: const InputDecoration(labelText: 'Registration No')),
+              TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'Phone')),
+              TextField(controller: emailCtrl, decoration: const InputDecoration(labelText: 'Email')),
+              TextField(controller: fatherPhoneCtrl, decoration: const InputDecoration(labelText: 'Father Phone')),
+              TextField(controller: motherPhoneCtrl, decoration: const InputDecoration(labelText: 'Mother Phone')),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              await widget.isar.writeTxn(() async {
+                student.name = nameCtrl.text.trim();
+                student.studentId = regCtrl.text.trim();
+                student.phoneNumber = phoneCtrl.text.trim();
+                student.fatherPhoneNumber = fatherPhoneCtrl.text.trim();
+                student.motherPhoneNumber = motherPhoneCtrl.text.trim();
+                student.email = emailCtrl.text.trim();
+                await widget.isar.students.put(student);
+              });
+              if (mounted) {
+                Navigator.pop(context);
+                _loadStudents();
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
   }
 }

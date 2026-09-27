@@ -15,6 +15,10 @@ class Student {
 
   late String name;
   late String studentId;
+  String? phoneNumber;
+  String? fatherPhoneNumber;
+  String? motherPhoneNumber;
+  String? email;
 
   // The room the student belongs to
   final room = IsarLink<Room>();

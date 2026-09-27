@@ -429,13 +429,33 @@ const StudentSchema = CollectionSchema(
   name: r'Student',
   id: -252783119861727542,
   properties: {
-    r'name': PropertySchema(
+    r'email': PropertySchema(
       id: 0,
+      name: r'email',
+      type: IsarType.string,
+    ),
+    r'fatherPhoneNumber': PropertySchema(
+      id: 1,
+      name: r'fatherPhoneNumber',
+      type: IsarType.string,
+    ),
+    r'motherPhoneNumber': PropertySchema(
+      id: 2,
+      name: r'motherPhoneNumber',
+      type: IsarType.string,
+    ),
+    r'name': PropertySchema(
+      id: 3,
       name: r'name',
       type: IsarType.string,
     ),
+    r'phoneNumber': PropertySchema(
+      id: 4,
+      name: r'phoneNumber',
+      type: IsarType.string,
+    ),
     r'studentId': PropertySchema(
-      id: 1,
+      id: 5,
       name: r'studentId',
       type: IsarType.string,
     )
@@ -474,7 +494,31 @@ int _studentEstimateSize(
   Map<Type, List<int>> allOffsets,
 ) {
   var bytesCount = offsets.last;
+  {
+    final value = object.email;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
+  {
+    final value = object.fatherPhoneNumber;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
+  {
+    final value = object.motherPhoneNumber;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
   bytesCount += 3 + object.name.length * 3;
+  {
+    final value = object.phoneNumber;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
   bytesCount += 3 + object.studentId.length * 3;
   return bytesCount;
 }
@@ -485,8 +529,12 @@ void _studentSerialize(
   List<int> offsets,
   Map<Type, List<int>> allOffsets,
 ) {
-  writer.writeString(offsets[0], object.name);
-  writer.writeString(offsets[1], object.studentId);
+  writer.writeString(offsets[0], object.email);
+  writer.writeString(offsets[1], object.fatherPhoneNumber);
+  writer.writeString(offsets[2], object.motherPhoneNumber);
+  writer.writeString(offsets[3], object.name);
+  writer.writeString(offsets[4], object.phoneNumber);
+  writer.writeString(offsets[5], object.studentId);
 }
 
 Student _studentDeserialize(
@@ -496,9 +544,13 @@ Student _studentDeserialize(
   Map<Type, List<int>> allOffsets,
 ) {
   final object = Student();
+  object.email = reader.readStringOrNull(offsets[0]);
+  object.fatherPhoneNumber = reader.readStringOrNull(offsets[1]);
   object.id = id;
-  object.name = reader.readString(offsets[0]);
-  object.studentId = reader.readString(offsets[1]);
+  object.motherPhoneNumber = reader.readStringOrNull(offsets[2]);
+  object.name = reader.readString(offsets[3]);
+  object.phoneNumber = reader.readStringOrNull(offsets[4]);
+  object.studentId = reader.readString(offsets[5]);
   return object;
 }
 
@@ -510,8 +562,16 @@ P _studentDeserializeProp<P>(
 ) {
   switch (propertyId) {
     case 0:
-      return (reader.readString(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 1:
+      return (reader.readStringOrNull(offset)) as P;
+    case 2:
+      return (reader.readStringOrNull(offset)) as P;
+    case 3:
+      return (reader.readString(offset)) as P;
+    case 4:
+      return (reader.readStringOrNull(offset)) as P;
+    case 5:
       return (reader.readString(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -610,6 +670,306 @@ extension StudentQueryWhere on QueryBuilder<Student, Student, QWhereClause> {
 
 extension StudentQueryFilter
     on QueryBuilder<Student, Student, QFilterCondition> {
+  QueryBuilder<Student, Student, QAfterFilterCondition> emailIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'email',
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition> emailIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'email',
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition> emailEqualTo(
+    String? value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'email',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition> emailGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'email',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition> emailLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'email',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition> emailBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'email',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition> emailStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'email',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition> emailEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'email',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition> emailContains(
+      String value,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'email',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition> emailMatches(
+      String pattern,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'email',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition> emailIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'email',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition> emailIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'email',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition>
+      fatherPhoneNumberIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'fatherPhoneNumber',
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition>
+      fatherPhoneNumberIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'fatherPhoneNumber',
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition>
+      fatherPhoneNumberEqualTo(
+    String? value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'fatherPhoneNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition>
+      fatherPhoneNumberGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'fatherPhoneNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition>
+      fatherPhoneNumberLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'fatherPhoneNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition>
+      fatherPhoneNumberBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'fatherPhoneNumber',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition>
+      fatherPhoneNumberStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'fatherPhoneNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition>
+      fatherPhoneNumberEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'fatherPhoneNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition>
+      fatherPhoneNumberContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'fatherPhoneNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition>
+      fatherPhoneNumberMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'fatherPhoneNumber',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition>
+      fatherPhoneNumberIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'fatherPhoneNumber',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition>
+      fatherPhoneNumberIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'fatherPhoneNumber',
+        value: '',
+      ));
+    });
+  }
+
   QueryBuilder<Student, Student, QAfterFilterCondition> idEqualTo(Id value) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
@@ -658,6 +1018,160 @@ extension StudentQueryFilter
         includeLower: includeLower,
         upper: upper,
         includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition>
+      motherPhoneNumberIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'motherPhoneNumber',
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition>
+      motherPhoneNumberIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'motherPhoneNumber',
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition>
+      motherPhoneNumberEqualTo(
+    String? value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'motherPhoneNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition>
+      motherPhoneNumberGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'motherPhoneNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition>
+      motherPhoneNumberLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'motherPhoneNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition>
+      motherPhoneNumberBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'motherPhoneNumber',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition>
+      motherPhoneNumberStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'motherPhoneNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition>
+      motherPhoneNumberEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'motherPhoneNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition>
+      motherPhoneNumberContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'motherPhoneNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition>
+      motherPhoneNumberMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'motherPhoneNumber',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition>
+      motherPhoneNumberIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'motherPhoneNumber',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition>
+      motherPhoneNumberIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'motherPhoneNumber',
+        value: '',
       ));
     });
   }
@@ -787,6 +1301,153 @@ extension StudentQueryFilter
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
         property: r'name',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition> phoneNumberIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'phoneNumber',
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition> phoneNumberIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'phoneNumber',
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition> phoneNumberEqualTo(
+    String? value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'phoneNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition> phoneNumberGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'phoneNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition> phoneNumberLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'phoneNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition> phoneNumberBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'phoneNumber',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition> phoneNumberStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'phoneNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition> phoneNumberEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'phoneNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition> phoneNumberContains(
+      String value,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'phoneNumber',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition> phoneNumberMatches(
+      String pattern,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'phoneNumber',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition> phoneNumberIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'phoneNumber',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterFilterCondition>
+      phoneNumberIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'phoneNumber',
         value: '',
       ));
     });
@@ -1004,6 +1665,42 @@ extension StudentQueryLinks
 }
 
 extension StudentQuerySortBy on QueryBuilder<Student, Student, QSortBy> {
+  QueryBuilder<Student, Student, QAfterSortBy> sortByEmail() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'email', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterSortBy> sortByEmailDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'email', Sort.desc);
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterSortBy> sortByFatherPhoneNumber() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'fatherPhoneNumber', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterSortBy> sortByFatherPhoneNumberDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'fatherPhoneNumber', Sort.desc);
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterSortBy> sortByMotherPhoneNumber() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'motherPhoneNumber', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterSortBy> sortByMotherPhoneNumberDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'motherPhoneNumber', Sort.desc);
+    });
+  }
+
   QueryBuilder<Student, Student, QAfterSortBy> sortByName() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'name', Sort.asc);
@@ -1013,6 +1710,18 @@ extension StudentQuerySortBy on QueryBuilder<Student, Student, QSortBy> {
   QueryBuilder<Student, Student, QAfterSortBy> sortByNameDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'name', Sort.desc);
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterSortBy> sortByPhoneNumber() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'phoneNumber', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterSortBy> sortByPhoneNumberDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'phoneNumber', Sort.desc);
     });
   }
 
@@ -1031,6 +1740,30 @@ extension StudentQuerySortBy on QueryBuilder<Student, Student, QSortBy> {
 
 extension StudentQuerySortThenBy
     on QueryBuilder<Student, Student, QSortThenBy> {
+  QueryBuilder<Student, Student, QAfterSortBy> thenByEmail() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'email', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterSortBy> thenByEmailDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'email', Sort.desc);
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterSortBy> thenByFatherPhoneNumber() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'fatherPhoneNumber', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterSortBy> thenByFatherPhoneNumberDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'fatherPhoneNumber', Sort.desc);
+    });
+  }
+
   QueryBuilder<Student, Student, QAfterSortBy> thenById() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'id', Sort.asc);
@@ -1043,6 +1776,18 @@ extension StudentQuerySortThenBy
     });
   }
 
+  QueryBuilder<Student, Student, QAfterSortBy> thenByMotherPhoneNumber() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'motherPhoneNumber', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterSortBy> thenByMotherPhoneNumberDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'motherPhoneNumber', Sort.desc);
+    });
+  }
+
   QueryBuilder<Student, Student, QAfterSortBy> thenByName() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'name', Sort.asc);
@@ -1052,6 +1797,18 @@ extension StudentQuerySortThenBy
   QueryBuilder<Student, Student, QAfterSortBy> thenByNameDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'name', Sort.desc);
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterSortBy> thenByPhoneNumber() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'phoneNumber', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Student, Student, QAfterSortBy> thenByPhoneNumberDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'phoneNumber', Sort.desc);
     });
   }
 
@@ -1070,10 +1827,40 @@ extension StudentQuerySortThenBy
 
 extension StudentQueryWhereDistinct
     on QueryBuilder<Student, Student, QDistinct> {
+  QueryBuilder<Student, Student, QDistinct> distinctByEmail(
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'email', caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<Student, Student, QDistinct> distinctByFatherPhoneNumber(
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'fatherPhoneNumber',
+          caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<Student, Student, QDistinct> distinctByMotherPhoneNumber(
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'motherPhoneNumber',
+          caseSensitive: caseSensitive);
+    });
+  }
+
   QueryBuilder<Student, Student, QDistinct> distinctByName(
       {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'name', caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<Student, Student, QDistinct> distinctByPhoneNumber(
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'phoneNumber', caseSensitive: caseSensitive);
     });
   }
 
@@ -1093,9 +1880,33 @@ extension StudentQueryProperty
     });
   }
 
+  QueryBuilder<Student, String?, QQueryOperations> emailProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'email');
+    });
+  }
+
+  QueryBuilder<Student, String?, QQueryOperations> fatherPhoneNumberProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'fatherPhoneNumber');
+    });
+  }
+
+  QueryBuilder<Student, String?, QQueryOperations> motherPhoneNumberProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'motherPhoneNumber');
+    });
+  }
+
   QueryBuilder<Student, String, QQueryOperations> nameProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'name');
+    });
+  }
+
+  QueryBuilder<Student, String?, QQueryOperations> phoneNumberProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'phoneNumber');
     });
   }
 

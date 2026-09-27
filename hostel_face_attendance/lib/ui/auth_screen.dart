@@ -44,92 +44,154 @@ class _AuthScreenState extends State<AuthScreen> {
     } else if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(_isRegistering ? 'Registration failed. Email might exist.' : 'Login failed. Please check credentials.'),
+        backgroundColor: Colors.red.shade600,
       ));
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final primaryColor = Theme.of(context).colorScheme.primary;
+
     return Scaffold(
-      appBar: AppBar(title: Text(_isRegistering ? 'Warden Registration' : 'Warden Login')),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.shield, size: 80, color: Colors.blue),
-              const SizedBox(height: 32),
-              if (_isRegistering) ...[
-                TextField(
-                  controller: _nameController,
-                  decoration: const InputDecoration(labelText: 'Full Name', border: OutlineInputBorder(), prefixIcon: Icon(Icons.person)),
+      backgroundColor: Colors.grey.shade50,
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Logo Section
+                Image.asset(
+                  'assets/images/logo.png',
+                  height: 120,
+                  width: 120,
+                  fit: BoxFit.contain,
                 ),
                 const SizedBox(height: 16),
-                TextField(
-                  controller: _hostelController,
-                  decoration: const InputDecoration(labelText: 'Hostel Name', border: OutlineInputBorder(), prefixIcon: Icon(Icons.apartment)),
+                const Text(
+                  'Kalasalingam University',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87),
+                  textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _blockController,
-                  decoration: const InputDecoration(labelText: 'Block Name', border: OutlineInputBorder(), prefixIcon: Icon(Icons.domain)),
+                const SizedBox(height: 8),
+                Text(
+                  _isRegistering ? 'Warden Registration' : 'Warden Portal Login',
+                  style: TextStyle(fontSize: 16, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
                 ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _floorController,
-                  decoration: const InputDecoration(labelText: 'Floor Number', border: OutlineInputBorder(), prefixIcon: Icon(Icons.layers)),
+                const SizedBox(height: 40),
+
+                // Form Section
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.grey.shade200),
+                    boxShadow: [
+                      BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4)),
+                    ],
+                  ),
+                  padding: const EdgeInsets.all(24.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (_isRegistering) ...[
+                        _buildTextField(_nameController, 'Full Name', Icons.person_outline),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(child: _buildTextField(_hostelController, 'Hostel Name', Icons.apartment_outlined)),
+                            const SizedBox(width: 12),
+                            Expanded(child: _buildTextField(_blockController, 'Block', Icons.domain)),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        _buildTextField(_floorController, 'Floor Number', Icons.layers_outlined),
+                        const SizedBox(height: 16),
+                      ],
+                      
+                      _buildTextField(_emailController, 'Warden Email', Icons.email_outlined, keyboardType: TextInputType.emailAddress),
+                      const SizedBox(height: 16),
+                      _buildTextField(_passwordController, 'Password', Icons.lock_outline, obscureText: true),
+                      
+                      const SizedBox(height: 32),
+                      
+                      if (_isLoading)
+                        const Center(child: CircularProgressIndicator())
+                      else
+                        ElevatedButton(
+                          onPressed: _submit,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: primaryColor,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            elevation: 0,
+                          ),
+                          child: Text(
+                            _isRegistering ? 'Create Account' : 'Sign In',
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 16),
+                
+                const SizedBox(height: 24),
+                
+                // Toggle Login/Register
+                TextButton(
+                  onPressed: () {
+                    setState(() {
+                      _isRegistering = !_isRegistering;
+                    });
+                  },
+                  style: TextButton.styleFrom(foregroundColor: primaryColor),
+                  child: Text(
+                    _isRegistering 
+                        ? 'Already have an account? Sign In' 
+                        : 'Need an account? Register',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
               ],
-              TextField(
-                controller: _emailController,
-                decoration: const InputDecoration(
-                  labelText: 'Warden Email',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.email),
-                ),
-                keyboardType: TextInputType.emailAddress,
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _passwordController,
-                decoration: const InputDecoration(
-                  labelText: 'Password',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.lock),
-                ),
-                obscureText: true,
-              ),
-              const SizedBox(height: 32),
-              if (_isLoading) 
-                const CircularProgressIndicator()
-              else 
-                Column(
-                  children: [
-                    ElevatedButton(
-                      onPressed: _submit,
-                      style: ElevatedButton.styleFrom(
-                        minimumSize: const Size(double.infinity, 50),
-                      ),
-                      child: Text(_isRegistering ? 'Register' : 'Login'),
-                    ),
-                    const SizedBox(height: 16),
-                    TextButton(
-                      onPressed: () {
-                        setState(() {
-                          _isRegistering = !_isRegistering;
-                        });
-                      },
-                      child: Text(_isRegistering 
-                          ? 'Already have an account? Login' 
-                          : 'Need an account? Register'),
-                    ),
-                  ],
-                ),
-            ],
+            ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildTextField(
+    TextEditingController controller, 
+    String label, 
+    IconData icon, 
+    {bool obscureText = false, TextInputType? keyboardType}
+  ) {
+    return TextField(
+      controller: controller,
+      obscureText: obscureText,
+      keyboardType: keyboardType,
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+        prefixIcon: Icon(icon, color: Colors.grey.shade500, size: 22),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Theme.of(context).colorScheme.primary, width: 2),
+        ),
+        filled: true,
+        fillColor: Colors.grey.shade50,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       ),
     );
   }

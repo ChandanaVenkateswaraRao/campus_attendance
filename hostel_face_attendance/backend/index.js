@@ -91,6 +91,11 @@ const db = new sqlite3.Database(dbPath, (err) => {
           present_students_json TEXT
         )
       `);
+
+      db.run('ALTER TABLE cloud_students ADD COLUMN phone_number TEXT', () => {});
+      db.run('ALTER TABLE cloud_students ADD COLUMN father_phone_number TEXT', () => {});
+      db.run('ALTER TABLE cloud_students ADD COLUMN mother_phone_number TEXT', () => {});
+      db.run('ALTER TABLE cloud_students ADD COLUMN email TEXT', () => {});
     });
   }
 });
@@ -150,8 +155,8 @@ app.post('/api/backup', authenticateToken, (req, res) => {
     insertRoom.finalize();
     
     // Insert students
-    const insertStudent = db.prepare('INSERT INTO cloud_students (warden_email, local_id, name, studentId, room_local_id) VALUES (?, ?, ?, ?, ?)');
-    (students || []).forEach(s => insertStudent.run([email, s.id, s.name, s.studentId, s.room_local_id || s.room.value?.id]));
+    const insertStudent = db.prepare('INSERT INTO cloud_students (warden_email, local_id, name, studentId, room_local_id, phone_number, father_phone_number, mother_phone_number, email) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    (students || []).forEach(s => insertStudent.run([email, s.id, s.name, s.studentId, s.room_local_id || s.room.value?.id, s.phoneNumber, s.fatherPhoneNumber, s.motherPhoneNumber, s.email]));
     insertStudent.finalize();
     
     // Insert embeddings
@@ -176,7 +181,13 @@ app.get('/api/restore', authenticateToken, (req, res) => {
       if (!err) result.rooms = rows;
     });
     db.all('SELECT * FROM cloud_students WHERE warden_email = ?', [email], (err, rows) => {
-      if (!err) result.students = rows;
+      if (!err) result.students = rows.map(r => ({
+        ...r,
+        phoneNumber: r.phone_number,
+        fatherPhoneNumber: r.father_phone_number,
+        motherPhoneNumber: r.mother_phone_number,
+        email: r.email
+      }));
     });
     db.all('SELECT * FROM cloud_face_embeddings WHERE warden_email = ?', [email], (err, rows) => {
       if (!err) result.faceEmbeddings = rows.map(r => ({...r, vector: JSON.parse(r.vector_json)}));
@@ -242,6 +253,34 @@ app.get('/api/records', (req, res) => {
     }
     
     // Parse the JSON string back into an object for the response
+    const formattedRows = rows.map(row => ({
+      ...row,
+      present_students: JSON.parse(row.present_students_json)
+    }));
+    
+    res.json(formattedRows);
+  });
+});
+
+// Fetch Attendance History Endpoint
+app.get('/api/attendance', authenticateToken, (req, res) => {
+  const { date } = req.query;
+  let query = 'SELECT * FROM attendance_records';
+  let params = [];
+
+  if (date) {
+    query += ' WHERE timestamp LIKE ?';
+    params.push(`${date}%`);
+  }
+
+  query += ' ORDER BY timestamp DESC';
+
+  db.all(query, params, (err, rows) => {
+    if (err) {
+      res.status(500).json({ error: err.message });
+      return;
+    }
+    
     const formattedRows = rows.map(row => ({
       ...row,
       present_students: JSON.parse(row.present_students_json)

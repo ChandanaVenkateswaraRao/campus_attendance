@@ -7,10 +7,11 @@ import '../services/sync_service.dart';
 enum StudentFilter { all, present, absent }
 
 class _HistoryData {
-  final AttendanceRecord record;
+  final Map<String, dynamic> record;
   final List<Student> present;
   final List<Student> absent;
-  _HistoryData(this.record, this.present, this.absent);
+  final DateTime timestamp;
+  _HistoryData(this.record, this.present, this.absent, this.timestamp);
 }
 
 class AttendanceHistoryScreen extends StatefulWidget {
@@ -36,48 +37,60 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
   Future<void> _loadRecords() async {
     setState(() => _isLoading = true);
     
-    final startOfDay = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
-    final endOfDay = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day, 23, 59, 59, 999);
-    
-    final records = await widget.isar.attendanceRecords
-        .filter()
-        .timestampBetween(startOfDay, endOfDay)
-        .sortByTimestampDesc()
-        .findAll();
-    
-    // Only keep the latest record for each room (since it's sorted descending)
-    final Map<int, AttendanceRecord> latestRecords = {};
-    for (var r in records) {
-      await r.room.load();
-      final roomId = r.room.value?.id;
-      if (roomId != null && !latestRecords.containsKey(roomId)) {
-        await r.presentStudents.load();
-        latestRecords[roomId] = r;
-      }
-    }
-
-    List<_HistoryData> data = [];
-    for (var record in latestRecords.values) {
-      final roomId = record.room.value!.id;
-      final allStudents = await widget.isar.students.filter().room((q) => q.idEqualTo(roomId)).findAll();
-      final presentIds = record.presentStudents.map((s) => s.id).toSet();
+    try {
+      final syncService = SyncService(widget.isar);
+      final records = await syncService.fetchAttendanceHistory(_selectedDate);
       
-      final present = <Student>[];
-      final absent = <Student>[];
-      for (var s in allStudents) {
-        if (presentIds.contains(s.id)) {
-          present.add(s);
-        } else {
-          absent.add(s);
+      final Map<String, Map<String, dynamic>> latestRecords = {};
+      for (var r in records) {
+        final roomName = r['room_name'] as String;
+        if (!latestRecords.containsKey(roomName)) {
+          latestRecords[roomName] = r;
         }
       }
-      data.add(_HistoryData(record, present, absent));
-    }
 
-    setState(() {
-      _historyData = data;
-      _isLoading = false;
-    });
+      List<_HistoryData> data = [];
+      for (var record in latestRecords.values) {
+        final roomName = record['room_name'] as String;
+        final room = await widget.isar.rooms.filter().nameEqualTo(roomName).findFirst();
+        final roomId = room?.id;
+        
+        List<Student> allStudents = [];
+        if (roomId != null) {
+          allStudents = await widget.isar.students.filter().room((q) => q.idEqualTo(roomId)).findAll();
+        }
+        
+        final presentStudentsList = record['present_students'] as List<dynamic>;
+        final presentIds = presentStudentsList.map((s) => s['id'] as int).toSet();
+        
+        final present = <Student>[];
+        final absent = <Student>[];
+        for (var s in allStudents) {
+          if (presentIds.contains(s.id)) {
+            present.add(s);
+          } else {
+            absent.add(s);
+          }
+        }
+        
+        data.add(_HistoryData(record, present, absent, DateTime.parse(record['timestamp'])));
+      }
+
+      if (mounted) {
+        setState(() {
+          _historyData = data;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _historyData = [];
+          _isLoading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not load history. Ensure you have an internet connection. Error: $e')));
+      }
+    }
   }
 
   Widget _buildStudentRow(Student s, bool isPresent) {
@@ -173,7 +186,7 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
                             
                             // Import sync_service.dart and call update
                             final syncService = SyncService(widget.isar);
-                            await syncService.updateAttendanceRecord(data.record.id, presentStudentsList);
+                            await syncService.updateAttendanceRecord(data.record['id'] as int, presentStudentsList);
                             
                             if (ctx.mounted) {
                               Navigator.pop(ctx);
@@ -283,7 +296,7 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
                     itemBuilder: (context, index) {
                       final data = _historyData[index];
                       final record = data.record;
-                      final roomName = record.room.value?.name ?? 'Unknown Room';
+                      final roomName = record['room_name'] as String? ?? 'Unknown Room';
                       final presentCount = data.present.length;
                       final absentCount = data.absent.length;
                       
@@ -300,56 +313,62 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
                       }
                       
                       return Card(
-                        margin: const EdgeInsets.only(bottom: 16),
+                        margin: const EdgeInsets.only(bottom: 12),
                         elevation: 0,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        child: Padding(
-                          padding: const EdgeInsets.all(20.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        child: Theme(
+                          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                          child: ExpansionTile(
+                            tilePadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                            title: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text('Room $roomName', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                                Text(
+                                  '${data.timestamp.hour.toString().padLeft(2, '0')}:${data.timestamp.minute.toString().padLeft(2, '0')}',
+                                  style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.w500, fontSize: 14),
+                                ),
+                              ],
+                            ),
+                            subtitle: Padding(
+                              padding: const EdgeInsets.only(top: 8.0),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.check_circle, color: Colors.green.shade600, size: 16),
+                                  const SizedBox(width: 4),
+                                  Text('$presentCount Present', style: TextStyle(color: Colors.grey.shade700, fontSize: 13)),
+                                  const SizedBox(width: 16),
+                                  Icon(Icons.cancel, color: Colors.red.shade600, size: 16),
+                                  const SizedBox(width: 4),
+                                  Text('$absentCount Absent', style: TextStyle(color: Colors.grey.shade700, fontSize: 13)),
+                                ],
+                              ),
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: Icon(Icons.edit, color: Theme.of(context).colorScheme.primary),
+                                  onPressed: () => _openEditModal(data),
+                                ),
+                                const Icon(Icons.expand_more),
+                              ],
+                            ),
                             children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text('Room $roomName', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                                  Row(
+                              if (studentWidgets.isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                                  child: Column(
                                     children: [
-                                      Text(
-                                        '${record.timestamp.hour.toString().padLeft(2, '0')}:${record.timestamp.minute.toString().padLeft(2, '0')}',
-                                        style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.w600),
-                                      ),
-                                      IconButton(
-                                        icon: const Icon(Icons.edit, color: Colors.blue),
-                                        onPressed: () => _openEditModal(data),
-                                      ),
+                                      const Divider(height: 1),
+                                      const SizedBox(height: 12),
+                                      ...studentWidgets,
                                     ],
                                   ),
-                                ],
-                              ),
-                              const Divider(height: 32),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                                children: [
-                                  Row(
-                                    children: [
-                                      const Icon(Icons.check_circle, color: Colors.green, size: 20),
-                                      const SizedBox(width: 8),
-                                      Text('$presentCount Present', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                                    ],
-                                  ),
-                                  Row(
-                                    children: [
-                                      const Icon(Icons.cancel, color: Colors.red, size: 20),
-                                      const SizedBox(width: 8),
-                                      Text('$absentCount Absent', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                              if (studentWidgets.isNotEmpty) ...[
-                                const SizedBox(height: 20),
-                                ...studentWidgets,
-                              ]
+                                ),
                             ],
                           ),
                         ),

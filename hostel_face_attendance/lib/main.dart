@@ -6,6 +6,7 @@ import 'models/models.dart';
 import 'ui/home_screen.dart';
 import 'ui/auth_screen.dart';
 import 'services/auth_service.dart';
+import 'services/sync_service.dart';
 
 late Isar globalIsar;
 
@@ -36,10 +37,18 @@ class MyApp extends StatelessWidget {
         useMaterial3: true,
       ),
       home: FutureBuilder<bool>(
-        future: Future.wait([
-          AuthService().isLoggedIn(),
-          Future.delayed(const Duration(seconds: 2)),
-        ]).then((results) => results[0] as bool),
+        future: AuthService().isLoggedIn().then((loggedIn) async {
+          if (loggedIn) {
+            try {
+              await SyncService(globalIsar).restoreFromCloud();
+            } catch (e) {
+              // Ignore failure on splash, let user retry later if needed
+            }
+          } else {
+            await Future.delayed(const Duration(seconds: 2));
+          }
+          return loggedIn;
+        }),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return Scaffold(
@@ -66,6 +75,11 @@ class MyApp extends StatelessWidget {
                     ),
                     const SizedBox(height: 32),
                     const CircularProgressIndicator(),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Syncing data from server...',
+                      style: TextStyle(color: Colors.indigo.shade300, fontSize: 14),
+                    ),
                   ],
                 ),
               ),

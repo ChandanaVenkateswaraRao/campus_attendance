@@ -5,6 +5,9 @@ import 'room_list_screen.dart';
 import 'sync_screen.dart';
 import 'attendance_history_screen.dart';
 import 'auth_screen.dart';
+import 'requests_screen.dart';
+import 'dart:async';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import '../services/sync_service.dart';
 import '../services/auth_service.dart';
 
@@ -24,10 +27,44 @@ class _HomeScreenState extends State<HomeScreen> {
   String _blockName = '';
   String _email = '';
 
+  late StreamSubscription<List<ConnectivityResult>> _connectivitySubscription;
+
   @override
   void initState() {
     super.initState();
     _loadProfile();
+    
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((List<ConnectivityResult> results) async {
+      if (results.contains(ConnectivityResult.mobile) || 
+          results.contains(ConnectivityResult.wifi) || 
+          results.contains(ConnectivityResult.ethernet)) {
+        
+        try {
+          final syncService = SyncService(widget.isar);
+          final count = await syncService.getPendingRecordsCount();
+          if (count > 0) {
+            await syncService.syncPendingRecords();
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Data synced successfully!'),
+                  backgroundColor: Colors.green,
+                  duration: Duration(seconds: 3),
+                ),
+              );
+            }
+          }
+        } catch (e) {
+          // Silent fail - will retry next time
+        }
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _connectivitySubscription.cancel();
+    super.dispose();
   }
 
   Future<void> _loadProfile() async {
@@ -36,7 +73,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final name = await _authService.getName() ?? 'Unknown Name';
     final block = await _authService.getBlockName() ?? 'Unknown Block';
     final email = await _authService.getEmail() ?? '';
-    
+
     if (mounted) {
       setState(() {
         _hostelName = hostel;
@@ -57,7 +94,10 @@ class _HomeScreenState extends State<HomeScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Name: $_name', style: const TextStyle(fontWeight: FontWeight.bold)),
+            Text(
+              'Name: $_name',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 8),
             Text('Email: $_email'),
             const SizedBox(height: 8),
@@ -69,7 +109,10 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
         ],
       ),
     );
@@ -91,7 +134,10 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Image.asset('assets/images/logo.png', fit: BoxFit.contain),
           ),
         ),
-        title: const Text('Hostel Attendance', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+        title: const Text(
+          'Hostel Attendance',
+          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+        ),
         backgroundColor: Theme.of(context).colorScheme.primary,
         elevation: 2,
         iconTheme: const IconThemeData(color: Colors.white),
@@ -102,129 +148,174 @@ class _HomeScreenState extends State<HomeScreen> {
             onSelected: (value) async {
               if (value == 'profile') {
                 _showProfile();
-              } else if (value == 'backup') {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Backing up...')));
-                try {
-                  await SyncService(widget.isar).backupToCloud();
-                  if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Backup successful!')));
-                } catch (e) {
-                  if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Backup failed: $e')));
-                }
-              } else if (value == 'restore') {
+              } else if (value == 'logout') {
                 showDialog(
                   context: context,
-                  builder: (ctx) => AlertDialog(
-                    title: const Text('Restore Data'),
-                    content: const Text('This will drop all local rooms and students, replacing them with cloud data. Proceed?'),
-                    actions: [
-                      TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-                      TextButton(
-                        onPressed: () async {
-                          Navigator.pop(ctx);
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Restoring...')));
-                          try {
-                            await SyncService(widget.isar).restoreFromCloud();
-                            if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Restore successful!')));
-                          } catch (e) {
-                            if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Restore failed: $e')));
-                          }
-                        },
-                        child: const Text('Restore', style: TextStyle(color: Colors.red)),
-                      ),
-                    ],
+                  barrierDismissible: false,
+                  builder: (ctx) => const AlertDialog(
+                    content: Row(
+                      children: [
+                        CircularProgressIndicator(),
+                        SizedBox(width: 24),
+                        Text('Backing up data...'),
+                      ],
+                    ),
                   ),
                 );
-              } else if (value == 'logout') {
-                await _authService.logout();
-                if (context.mounted) {
-                  Navigator.pushReplacement(context, MaterialPageRoute(builder: (ctx) => const AuthScreen()));
+
+                try {
+                  final syncService = SyncService(widget.isar);
+                  await syncService.syncPendingRecords();
+                  await syncService.backupToCloud();
+
+                  await widget.isar.writeTxn(() async {
+                    await widget.isar.clear();
+                  });
+
+                  await _authService.logout();
+
+                  if (context.mounted) {
+                    Navigator.pop(context); // close dialog
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(builder: (ctx) => const AuthScreen()),
+                    );
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    Navigator.pop(context); // close dialog
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Cannot logout: Network required to safely backup data. Error: $e',
+                        ),
+                        backgroundColor: Colors.red.shade600,
+                        duration: const Duration(seconds: 4),
+                      ),
+                    );
+                  }
                 }
               }
             },
             itemBuilder: (BuildContext context) => [
               const PopupMenuItem(value: 'profile', child: Text('Profile')),
-              const PopupMenuItem(value: 'backup', child: Text('Backup to Cloud')),
-              const PopupMenuItem(value: 'restore', child: Text('Restore from Cloud')),
               const PopupMenuItem(value: 'logout', child: Text('Logout')),
             ],
-          )
+          ),
         ],
       ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                '$_hostelName - Floor $_floorNumber',
-                style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, height: 1.2),
-              ),
-              const SizedBox(height: 40),
-              
-              _buildModernCard(
-                context,
-                title: 'Registration',
-                subtitle: 'Manage rooms & register students',
-                icon: Icons.person_add_rounded,
-                color: Colors.blueAccent,
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => RoomListScreen(isar: widget.isar, isAttendanceMode: false),
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(height: 20),
-              
-              _buildModernCard(
-                context,
-                title: 'Take Attendance',
-                subtitle: 'Scan rooms for daily attendance',
-                icon: Icons.camera_alt_rounded,
-                color: Colors.green,
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => RoomListScreen(isar: widget.isar, isAttendanceMode: true),
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(height: 20),
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 24.0,
+              vertical: 16.0,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  '$_hostelName - Floor $_floorNumber',
+                  style: const TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                    height: 1.2,
+                  ),
+                ),
+                const SizedBox(height: 40),
 
-              _buildModernCard(
-                context,
-                title: 'Attendance History',
-                subtitle: 'View saved records in database',
-                icon: Icons.history_rounded,
-                color: Colors.purple,
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => AttendanceHistoryScreen(isar: widget.isar)),
-                  );
-                },
-              ),
-              const SizedBox(height: 20),
+                _buildModernCard(
+                  context,
+                  title: 'Registration',
+                  subtitle: 'Manage rooms & register students',
+                  icon: Icons.person_add_rounded,
+                  color: Colors.blueAccent,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => RoomListScreen(
+                          isar: widget.isar,
+                          isAttendanceMode: false,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 20),
 
-              _buildModernCard(
-                context,
-                title: 'Sync Offline Data',
-                subtitle: 'Upload pending records to server',
-                icon: Icons.cloud_upload_rounded,
-                color: Colors.orange,
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => SyncScreen(isar: widget.isar)),
-                  );
-                },
-              ),
-            ],
+                _buildModernCard(
+                  context,
+                  title: 'Take Attendance',
+                  subtitle: 'Scan rooms for daily attendance',
+                  icon: Icons.camera_alt_rounded,
+                  color: Colors.green,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => RoomListScreen(
+                          isar: widget.isar,
+                          isAttendanceMode: true,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 20),
+
+                _buildModernCard(
+                  context,
+                  title: 'Attendance History',
+                  subtitle: 'View saved records in database',
+                  icon: Icons.history_rounded,
+                  color: Colors.purple,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            AttendanceHistoryScreen(isar: widget.isar),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 20),
+
+                _buildModernCard(
+                  context,
+                  title: 'Sync Offline Data',
+                  subtitle: 'Upload pending records to server',
+                  icon: Icons.cloud_upload_rounded,
+                  color: Colors.orange,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => SyncScreen(isar: widget.isar),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 20),
+
+                _buildModernCard(
+                  context,
+                  title: 'Leave & Outings',
+                  subtitle: 'Manage student permissions',
+                  icon: Icons.approval_rounded,
+                  color: Colors.redAccent,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const RequestsScreen(),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -240,7 +331,7 @@ class _HomeScreenState extends State<HomeScreen> {
     required VoidCallback onTap,
   }) {
     final primaryColor = Theme.of(context).colorScheme.primary;
-    
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -267,7 +358,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   Text(
                     title,
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(

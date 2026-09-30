@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models/models.dart';
 import '../services/sync_service.dart';
@@ -19,11 +20,13 @@ class AttendanceHistoryScreen extends StatefulWidget {
   const AttendanceHistoryScreen({super.key, required this.isar});
 
   @override
-  State<AttendanceHistoryScreen> createState() => _AttendanceHistoryScreenState();
+  State<AttendanceHistoryScreen> createState() =>
+      _AttendanceHistoryScreenState();
 }
 
 class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
   List<_HistoryData> _historyData = [];
+  List<dynamic> _allLeaves = [];
   bool _isLoading = true;
   DateTime _selectedDate = DateTime.now();
   StudentFilter _filter = StudentFilter.all;
@@ -36,11 +39,16 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
 
   Future<void> _loadRecords() async {
     setState(() => _isLoading = true);
-    
+
     try {
       final syncService = SyncService(widget.isar);
       final records = await syncService.fetchAttendanceHistory(_selectedDate);
-      
+      try {
+        _allLeaves = await syncService.fetchLeaves();
+      } catch (_) {
+        _allLeaves = [];
+      }
+
       final Map<String, Map<String, dynamic>> latestRecords = {};
       for (var r in records) {
         final roomName = r['room_name'] as String;
@@ -52,17 +60,25 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
       List<_HistoryData> data = [];
       for (var record in latestRecords.values) {
         final roomName = record['room_name'] as String;
-        final room = await widget.isar.rooms.filter().nameEqualTo(roomName).findFirst();
+        final room = await widget.isar.rooms
+            .filter()
+            .nameEqualTo(roomName)
+            .findFirst();
         final roomId = room?.id;
-        
+
         List<Student> allStudents = [];
         if (roomId != null) {
-          allStudents = await widget.isar.students.filter().room((q) => q.idEqualTo(roomId)).findAll();
+          allStudents = await widget.isar.students
+              .filter()
+              .room((q) => q.idEqualTo(roomId))
+              .findAll();
         }
-        
+
         final presentStudentsList = record['present_students'] as List<dynamic>;
-        final presentIds = presentStudentsList.map((s) => s['id'] as int).toSet();
-        
+        final presentIds = presentStudentsList
+            .map((s) => s['id'] as int)
+            .toSet();
+
         final present = <Student>[];
         final absent = <Student>[];
         for (var s in allStudents) {
@@ -72,8 +88,15 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
             absent.add(s);
           }
         }
-        
-        data.add(_HistoryData(record, present, absent, DateTime.parse(record['timestamp'])));
+
+        data.add(
+          _HistoryData(
+            record,
+            present,
+            absent,
+            DateTime.parse(record['timestamp']),
+          ),
+        );
       }
 
       if (mounted) {
@@ -88,37 +111,114 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
           _historyData = [];
           _isLoading = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not load history. Ensure you have an internet connection. Error: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Could not load history. Ensure you have an internet connection. Error: $e',
+            ),
+          ),
+        );
       }
     }
   }
 
-  Widget _buildStudentRow(Student s, bool isPresent) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6.0),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 12,
-            backgroundColor: isPresent ? Colors.teal.shade50 : Colors.red.shade50,
-            child: Icon(
-              isPresent ? Icons.check : Icons.close, 
-              size: 14, 
-              color: isPresent ? Colors.teal.shade400 : Colors.red.shade400
+  Widget _buildStudentRow(Student s, bool isPresent, DateTime recordDate) {
+    String? absentStatus;
+    Color? statusColor;
+
+    if (!isPresent) {
+      final recordDateStr =
+          '${recordDate.year}-${recordDate.month.toString().padLeft(2, '0')}-${recordDate.day.toString().padLeft(2, '0')}';
+      final yesterday = recordDate.subtract(const Duration(days: 1));
+      final yesterdayStr =
+          '${yesterday.year}-${yesterday.month.toString().padLeft(2, '0')}-${yesterday.day.toString().padLeft(2, '0')}';
+
+      absentStatus = 'Unauthorized leave';
+      statusColor = Colors.red;
+
+      final studentLeaves = _allLeaves
+          .where(
+            (l) =>
+                l['status'] == 'APPROVED' &&
+                l['register_number'] == s.studentId,
+          )
+          .toList();
+
+      for (var l in studentLeaves) {
+        final fromDate = l['from_date']?.toString().split('T').first;
+        final toDate = l['to_date']?.toString().split('T').first;
+        if (fromDate != null && toDate != null) {
+          if (recordDateStr.compareTo(fromDate) >= 0 &&
+              recordDateStr.compareTo(toDate) <= 0) {
+            absentStatus = 'On leave';
+            statusColor = Colors.orange;
+            break;
+          } else if (yesterdayStr.compareTo(fromDate) >= 0 &&
+              yesterdayStr.compareTo(toDate) <= 0) {
+            absentStatus = 'Leave expired yesterday';
+            statusColor = Colors.redAccent;
+          }
+        }
+      }
+    }
+
+    bool canShowContact = !isPresent && absentStatus != 'On leave';
+
+    return InkWell(
+      onLongPress: canShowContact
+          ? () => _showContactOptions(context, s)
+          : null,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6.0, horizontal: 4.0),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 12,
+              backgroundColor: isPresent
+                  ? Colors.teal.shade50
+                  : Colors.red.shade50,
+              child: Icon(
+                isPresent ? Icons.check : Icons.close,
+                size: 14,
+                color: isPresent ? Colors.teal.shade400 : Colors.red.shade400,
+              ),
             ),
-          ),
-          const SizedBox(width: 12),
-          Text(
-            s.name, 
-            style: TextStyle(
-              fontSize: 15, 
-              fontWeight: FontWeight.w500,
-              color: isPresent ? Colors.black87 : Colors.grey.shade600,
-            )
-          ),
-          const Spacer(),
-          Text(s.studentId, style: TextStyle(fontSize: 14, color: Colors.grey.shade500, fontFamily: 'monospace')),
-        ],
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    s.name,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                      color: isPresent ? Colors.black87 : Colors.grey.shade600,
+                    ),
+                  ),
+                  if (!isPresent && absentStatus != null)
+                    Text(
+                      absentStatus,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: statusColor,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Text(
+              s.studentId,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey.shade500,
+                fontFamily: 'monospace',
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -131,19 +231,31 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (ctx) {
         return StatefulBuilder(
           builder: (BuildContext context, StateSetter setModalState) {
             return Padding(
-              padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(ctx).viewInsets.bottom,
+              ),
               child: Container(
                 padding: const EdgeInsets.all(24),
-                constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.7),
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(ctx).size.height * 0.7,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Edit Attendance', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                    const Text(
+                      'Edit Attendance',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     const SizedBox(height: 16),
                     Expanded(
                       child: ListView.builder(
@@ -181,21 +293,42 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
                           try {
                             final presentStudentsList = allStudents
                                 .where((s) => selectedStudentIds.contains(s.id))
-                                .map((s) => {'id': s.id, 'name': s.name, 'studentId': s.studentId})
+                                .map(
+                                  (s) => {
+                                    'id': s.id,
+                                    'name': s.name,
+                                    'studentId': s.studentId,
+                                  },
+                                )
                                 .toList();
-                            
+
                             // Import sync_service.dart and call update
                             final syncService = SyncService(widget.isar);
-                            await syncService.updateAttendanceRecord(data.record['id'] as int, presentStudentsList);
-                            
+                            await syncService.updateAttendanceRecord(
+                              data.record['id'] as int,
+                              presentStudentsList,
+                            );
+
                             if (ctx.mounted) {
                               Navigator.pop(ctx);
-                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Attendance updated successfully!')));
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Attendance updated successfully!',
+                                  ),
+                                ),
+                              );
                               _loadRecords(); // Refresh the list
                             }
                           } catch (e) {
                             if (ctx.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to update. Ensure you have an internet connection. Error: $e')));
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'Failed to update. Ensure you have an internet connection. Error: $e',
+                                  ),
+                                ),
+                              );
                             }
                             setModalState(() => isSaving = false);
                           }
@@ -217,7 +350,10 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
     return Scaffold(
       backgroundColor: Colors.grey.shade100,
       appBar: AppBar(
-        title: const Text('Attendance History', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Attendance History',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         backgroundColor: Colors.white,
         elevation: 0,
         foregroundColor: Colors.black,
@@ -235,7 +371,10 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
                   children: [
                     Text(
                       'Date: ${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     TextButton.icon(
                       onPressed: () async {
@@ -252,7 +391,7 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
                       },
                       icon: const Icon(Icons.calendar_month),
                       label: const Text('Change'),
-                    )
+                    ),
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -260,9 +399,18 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
                   width: double.infinity,
                   child: SegmentedButton<StudentFilter>(
                     segments: const [
-                      ButtonSegment(value: StudentFilter.all, label: Text('All')),
-                      ButtonSegment(value: StudentFilter.present, label: Text('Present')),
-                      ButtonSegment(value: StudentFilter.absent, label: Text('Absent')),
+                      ButtonSegment(
+                        value: StudentFilter.all,
+                        label: Text('All'),
+                      ),
+                      ButtonSegment(
+                        value: StudentFilter.present,
+                        label: Text('Present'),
+                      ),
+                      ButtonSegment(
+                        value: StudentFilter.absent,
+                        label: Text('Absent'),
+                      ),
                     ],
                     selected: {_filter},
                     onSelectionChanged: (Set<StudentFilter> newSelection) {
@@ -277,16 +425,26 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
             ),
           ),
           Expanded(
-            child: _isLoading 
-              ? const Center(child: CircularProgressIndicator())
-              : _historyData.isEmpty 
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _historyData.isEmpty
                 ? Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.history_outlined, size: 64, color: Colors.grey.shade400),
+                        Icon(
+                          Icons.history_outlined,
+                          size: 64,
+                          color: Colors.grey.shade400,
+                        ),
                         const SizedBox(height: 16),
-                        Text('No attendance records for this date.', style: TextStyle(color: Colors.grey.shade600, fontSize: 16)),
+                        Text(
+                          'No attendance records for this date.',
+                          style: TextStyle(
+                            color: Colors.grey.shade600,
+                            fontSize: 16,
+                          ),
+                        ),
                       ],
                     ),
                   )
@@ -296,22 +454,29 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
                     itemBuilder: (context, index) {
                       final data = _historyData[index];
                       final record = data.record;
-                      final roomName = record['room_name'] as String? ?? 'Unknown Room';
+                      final roomName =
+                          record['room_name'] as String? ?? 'Unknown Room';
                       final presentCount = data.present.length;
                       final absentCount = data.absent.length;
-                      
+
                       List<Widget> studentWidgets = [];
-                      if (_filter == StudentFilter.all || _filter == StudentFilter.present) {
+                      if (_filter == StudentFilter.all ||
+                          _filter == StudentFilter.present) {
                         for (var s in data.present) {
-                          studentWidgets.add(_buildStudentRow(s, true));
+                          studentWidgets.add(
+                            _buildStudentRow(s, true, data.timestamp),
+                          );
                         }
                       }
-                      if (_filter == StudentFilter.all || _filter == StudentFilter.absent) {
+                      if (_filter == StudentFilter.all ||
+                          _filter == StudentFilter.absent) {
                         for (var s in data.absent) {
-                          studentWidgets.add(_buildStudentRow(s, false));
+                          studentWidgets.add(
+                            _buildStudentRow(s, false, data.timestamp),
+                          );
                         }
                       }
-                      
+
                       return Card(
                         margin: const EdgeInsets.only(bottom: 12),
                         elevation: 0,
@@ -320,16 +485,31 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
                           side: BorderSide(color: Colors.grey.shade300),
                         ),
                         child: Theme(
-                          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                          data: Theme.of(
+                            context,
+                          ).copyWith(dividerColor: Colors.transparent),
                           child: ExpansionTile(
-                            tilePadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                            tilePadding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 8,
+                            ),
                             title: Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Text('Room $roomName', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                                Text(
+                                  'Room $roomName',
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                                 Text(
                                   '${data.timestamp.hour.toString().padLeft(2, '0')}:${data.timestamp.minute.toString().padLeft(2, '0')}',
-                                  style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.w500, fontSize: 14),
+                                  style: TextStyle(
+                                    color: Colors.grey.shade600,
+                                    fontWeight: FontWeight.w500,
+                                    fontSize: 14,
+                                  ),
                                 ),
                               ],
                             ),
@@ -337,13 +517,33 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
                               padding: const EdgeInsets.only(top: 8.0),
                               child: Row(
                                 children: [
-                                  Icon(Icons.check_circle, color: Colors.green.shade600, size: 16),
+                                  Icon(
+                                    Icons.check_circle,
+                                    color: Colors.green.shade600,
+                                    size: 16,
+                                  ),
                                   const SizedBox(width: 4),
-                                  Text('$presentCount Present', style: TextStyle(color: Colors.grey.shade700, fontSize: 13)),
+                                  Text(
+                                    '$presentCount Present',
+                                    style: TextStyle(
+                                      color: Colors.grey.shade700,
+                                      fontSize: 13,
+                                    ),
+                                  ),
                                   const SizedBox(width: 16),
-                                  Icon(Icons.cancel, color: Colors.red.shade600, size: 16),
+                                  Icon(
+                                    Icons.cancel,
+                                    color: Colors.red.shade600,
+                                    size: 16,
+                                  ),
                                   const SizedBox(width: 4),
-                                  Text('$absentCount Absent', style: TextStyle(color: Colors.grey.shade700, fontSize: 13)),
+                                  Text(
+                                    '$absentCount Absent',
+                                    style: TextStyle(
+                                      color: Colors.grey.shade700,
+                                      fontSize: 13,
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
@@ -351,7 +551,12 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 IconButton(
-                                  icon: Icon(Icons.edit, color: Theme.of(context).colorScheme.primary),
+                                  icon: Icon(
+                                    Icons.edit,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.primary,
+                                  ),
                                   onPressed: () => _openEditModal(data),
                                 ),
                                 const Icon(Icons.expand_more),
@@ -360,7 +565,12 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
                             children: [
                               if (studentWidgets.isNotEmpty)
                                 Padding(
-                                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                                  padding: const EdgeInsets.fromLTRB(
+                                    20,
+                                    0,
+                                    20,
+                                    20,
+                                  ),
                                   child: Column(
                                     children: [
                                       const Divider(height: 1),
@@ -379,5 +589,105 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
         ],
       ),
     );
+  }
+
+  void _showContactOptions(BuildContext context, Student student) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24.0,
+                    vertical: 8.0,
+                  ),
+                  child: Text(
+                    'Contact ${student.name}',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                const Divider(),
+                if (student.phoneNumber != null &&
+                    student.phoneNumber!.isNotEmpty)
+                  ListTile(
+                    leading: const Icon(Icons.person, color: Colors.blue),
+                    title: const Text('Student Phone'),
+                    subtitle: Text(student.phoneNumber!),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _launchDialer(student.phoneNumber!);
+                    },
+                  ),
+                if (student.fatherPhoneNumber != null &&
+                    student.fatherPhoneNumber!.isNotEmpty)
+                  ListTile(
+                    leading: const Icon(
+                      Icons.escalator_warning,
+                      color: Colors.green,
+                    ),
+                    title: const Text('Father Phone'),
+                    subtitle: Text(student.fatherPhoneNumber!),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _launchDialer(student.fatherPhoneNumber!);
+                    },
+                  ),
+                if (student.motherPhoneNumber != null &&
+                    student.motherPhoneNumber!.isNotEmpty)
+                  ListTile(
+                    leading: const Icon(
+                      Icons.escalator_warning,
+                      color: Colors.orange,
+                    ),
+                    title: const Text('Mother Phone'),
+                    subtitle: Text(student.motherPhoneNumber!),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _launchDialer(student.motherPhoneNumber!);
+                    },
+                  ),
+                if ((student.phoneNumber == null ||
+                        student.phoneNumber!.isEmpty) &&
+                    (student.fatherPhoneNumber == null ||
+                        student.fatherPhoneNumber!.isEmpty) &&
+                    (student.motherPhoneNumber == null ||
+                        student.motherPhoneNumber!.isEmpty))
+                  const Padding(
+                    padding: EdgeInsets.all(24.0),
+                    child: Text(
+                      'No contact information available.',
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _launchDialer(String number) async {
+    final Uri url = Uri(scheme: 'tel', path: number);
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url);
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Could not open dialer.')));
+      }
+    }
   }
 }

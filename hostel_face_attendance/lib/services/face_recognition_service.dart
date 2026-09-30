@@ -95,6 +95,7 @@ class FaceRecognitionService {
 
   void close() {
     _interpreter?.close();
+    _interpreter = null;
   }
 
   // Fast NV21 to RGB using integer approximation

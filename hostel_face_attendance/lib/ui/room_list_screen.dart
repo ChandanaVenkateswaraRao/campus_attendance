@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import '../models/models.dart';
+import '../services/sync_service.dart';
 import 'student_list_screen.dart';
 import 'attendance_screen.dart';
 
@@ -96,12 +98,40 @@ class _RoomListScreenState extends State<RoomListScreen> {
         }
         return;
       }
+      
+      final connectivityResult = await Connectivity().checkConnectivity();
+      if (connectivityResult.contains(ConnectivityResult.none)) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No internet connection. Cannot create room offline.')));
+        }
+        return;
+      }
+
+      if (mounted) {
+        showDialog(context: context, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator()));
+      }
 
       final newRoom = Room()..name = name;
       await widget.isar.writeTxn(() async {
         await widget.isar.rooms.put(newRoom);
       });
-      _loadRooms();
+      
+      try {
+        await SyncService(widget.isar).backupToCloud();
+        if (mounted) {
+          Navigator.pop(context); // close dialog
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Room created successfully.'), backgroundColor: Colors.green));
+          _loadRooms();
+        }
+      } catch (e) {
+        await widget.isar.writeTxn(() async {
+          await widget.isar.rooms.delete(newRoom.id);
+        });
+        if (mounted) {
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Server error. Room creation aborted.'), backgroundColor: Colors.red));
+        }
+      }
     }
   }
 

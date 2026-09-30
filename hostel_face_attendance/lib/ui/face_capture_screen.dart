@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:isar/isar.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import '../services/sync_service.dart';
 import '../services/camera_service.dart';
 import '../services/ml_isolate_worker.dart';
 import '../models/models.dart';
@@ -83,19 +85,35 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen> {
       _cameraService.stopImageStream();
       
       // Save
-      await _saveStudentToDatabase();
+      final success = await _saveStudentToDatabase();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Registration Complete!')),
-        );
-        // Pop back to Student List
-        Navigator.pop(context); // Pop FaceCaptureScreen
-        Navigator.pop(context); // Pop RegistrationScreen
+        if (success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Registration Complete! Data synced to server.'), backgroundColor: Colors.green),
+          );
+          // Pop back to Student List
+          Navigator.pop(context); // Pop FaceCaptureScreen
+          Navigator.pop(context); // Pop RegistrationScreen
+        }
       }
     }
   }
 
-  Future<void> _saveStudentToDatabase() async {
+  Future<bool> _saveStudentToDatabase() async {
+    final connectivityResult = await Connectivity().checkConnectivity();
+    if (connectivityResult.contains(ConnectivityResult.none)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No internet connection. Cannot register offline.'), backgroundColor: Colors.red),
+        );
+      }
+      return false;
+    }
+
+    if (mounted) {
+      showDialog(context: context, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator()));
+    }
+
     await widget.isar.writeTxn(() async {
       // 1. Create the student
       await widget.isar.students.put(widget.student);
@@ -109,6 +127,27 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen> {
         await embedding.student.save();
       }
     });
+
+    try {
+      await SyncService(widget.isar).backupToCloud();
+      if (mounted) {
+        Navigator.pop(context); // Close loading dialog
+      }
+      return true;
+    } catch (e) {
+      // Rollback local changes
+      await widget.isar.writeTxn(() async {
+        await widget.isar.faceEmbeddings.filter().student((q) => q.idEqualTo(widget.student.id)).deleteAll();
+        await widget.isar.students.delete(widget.student.id);
+      });
+      if (mounted) {
+        Navigator.pop(context); // Close loading dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Server error during sync. Registration aborted.'), backgroundColor: Colors.red),
+        );
+      }
+      return false;
+    }
   }
 
   @override

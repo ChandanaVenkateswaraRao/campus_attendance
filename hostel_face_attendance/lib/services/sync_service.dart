@@ -8,7 +8,7 @@ class SyncService {
   final Isar isar;
   // Replace with your local machine's IP address if testing on a physical device,
   // or use 10.0.2.2 if testing on Android Emulator
-  final String backendUrl = 'http://10.2.8.142:3000/api/sync';
+  final String backendUrl = 'http://10.131.73.51:3000/api/sync';
 
   SyncService(this.isar);
 
@@ -20,7 +20,7 @@ class SyncService {
     final dateString = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
     
     final response = await http.get(
-      Uri.parse('http://10.2.8.142:3000/api/attendance?date=$dateString'),
+      Uri.parse('http://10.131.73.51:3000/api/attendance?date=$dateString'),
       headers: {'Authorization': 'Bearer $token'},
     ).timeout(const Duration(seconds: 10));
 
@@ -31,6 +31,13 @@ class SyncService {
     } else {
       throw Exception('Failed to fetch history: ${response.statusCode}');
     }
+  }
+
+  Future<int> getPendingRecordsCount() async {
+    return await isar.attendanceRecords
+        .filter()
+        .isSyncedEqualTo(false)
+        .count();
   }
 
   Future<void> syncPendingRecords() async {
@@ -120,7 +127,7 @@ class SyncService {
     };
 
     final response = await http.post(
-      Uri.parse('http://10.2.8.142:3000/api/backup'),
+      Uri.parse('http://10.131.73.51:3000/api/backup'),
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token'
@@ -138,7 +145,7 @@ class SyncService {
     if (token == null) throw Exception('Not logged in');
 
     final response = await http.get(
-      Uri.parse('http://10.2.8.142:3000/api/restore'),
+      Uri.parse('http://10.131.73.51:3000/api/restore'),
       headers: {'Authorization': 'Bearer $token'},
     ).timeout(const Duration(seconds: 30));
 
@@ -150,20 +157,24 @@ class SyncService {
         await isar.students.clear();
         await isar.faceEmbeddings.clear();
         
-        final rooms = (data['rooms'] as List).map((r) => Room()
-          ..id = r['local_id']
-          ..name = r['name']).toList();
+        final rooms = (data['rooms'] as List).map((r) {
+          final roomId = r['local_id'] ?? r['id'];
+          final room = Room()..name = r['name'];
+          if (roomId != null) room.id = roomId;
+          return room;
+        }).toList();
         await isar.rooms.putAll(rooms);
 
         final students = (data['students'] as List).map((s) {
+          final studentId = s['local_id'] ?? s['id'];
           final student = Student()
-            ..id = s['local_id']
             ..name = s['name']
             ..studentId = s['studentId']
             ..phoneNumber = s['phoneNumber']
             ..fatherPhoneNumber = s['fatherPhoneNumber']
             ..motherPhoneNumber = s['motherPhoneNumber']
             ..email = s['email'];
+          if (studentId != null) student.id = studentId;
           return MapEntry(s, student);
         }).toList();
         
@@ -172,8 +183,9 @@ class SyncService {
         for (var entry in students) {
           final sData = entry.key;
           final student = entry.value;
-          if (sData['room_local_id'] != null) {
-            final room = await isar.rooms.get(sData['room_local_id']);
+          final roomLocalId = sData['room_local_id'] ?? sData['room_id'];
+          if (roomLocalId != null) {
+            final room = await isar.rooms.get(roomLocalId);
             if (room != null) {
               student.room.value = room;
               await student.room.save();
@@ -182,9 +194,10 @@ class SyncService {
         }
 
         final embeddings = (data['faceEmbeddings'] as List).map((f) {
+          final embId = f['local_id'] ?? f['id'];
           final emb = FaceEmbedding()
-            ..id = f['local_id']
             ..vector = List<double>.from(f['vector']);
+          if (embId != null) emb.id = embId;
           return MapEntry(f, emb);
         }).toList();
 
@@ -193,8 +206,9 @@ class SyncService {
         for (var entry in embeddings) {
           final fData = entry.key;
           final emb = entry.value;
-          if (fData['student_local_id'] != null) {
-            final student = await isar.students.get(fData['student_local_id']);
+          final studentLocalId = fData['student_local_id'] ?? fData['student_id'];
+          if (studentLocalId != null) {
+            final student = await isar.students.get(studentLocalId);
             if (student != null) {
               emb.student.value = student;
               await emb.student.save();
@@ -216,7 +230,7 @@ class SyncService {
     };
 
     final response = await http.put(
-      Uri.parse('http://10.2.8.142:3000/api/attendance/$recordId'),
+      Uri.parse('http://10.131.73.51:3000/api/attendance/$recordId'),
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token'
@@ -228,6 +242,23 @@ class SyncService {
       throw Exception('Failed to update record: ${response.statusCode}');
     }
     print('Record updated successfully.');
+  }
+
+  Future<List<dynamic>> fetchLeaves() async {
+    final token = await AuthService().getToken();
+    if (token == null) return [];
+    try {
+      final res = await http.get(
+        Uri.parse('http://10.131.73.51:3000/api/warden/leaves'),
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 10));
+      if (res.statusCode == 200) {
+        return jsonDecode(res.body);
+      }
+    } catch (e) {
+      print('Error fetching leaves: $e');
+    }
+    return [];
   }
 }
 

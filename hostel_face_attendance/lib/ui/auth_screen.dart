@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
+import '../services/sync_service.dart';
 import 'home_screen.dart';
 import '../main.dart'; // import globalIsar
 
@@ -13,39 +14,39 @@ class AuthScreen extends StatefulWidget {
 class _AuthScreenState extends State<AuthScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _nameController = TextEditingController();
-  final _hostelController = TextEditingController();
-  final _blockController = TextEditingController();
-  final _floorController = TextEditingController();
   
   final _authService = AuthService();
   bool _isLoading = false;
-  bool _isRegistering = false;
 
   void _submit() async {
     setState(() => _isLoading = true);
-    bool success;
-    if (_isRegistering) {
-      success = await _authService.register(
-        _emailController.text,
-        _passwordController.text,
-        _nameController.text,
-        _hostelController.text,
-        _blockController.text,
-        _floorController.text,
-      );
-    } else {
-      success = await _authService.login(_emailController.text, _passwordController.text);
-    }
-    setState(() => _isLoading = false);
+    bool success = await _authService.login(_emailController.text, _passwordController.text);
     
-    if (success && mounted) {
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => HomeScreen(isar: globalIsar)));
-    } else if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(_isRegistering ? 'Registration failed. Email might exist.' : 'Login failed. Please check credentials.'),
-        backgroundColor: Colors.red.shade600,
-      ));
+    if (success) {
+      try {
+        await SyncService(globalIsar).restoreFromCloud();
+        if (mounted) {
+          setState(() => _isLoading = false);
+          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => HomeScreen(isar: globalIsar)));
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() => _isLoading = false);
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Login succeeded, but data sync failed: $e'),
+            backgroundColor: Colors.orange.shade600,
+          ));
+          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => HomeScreen(isar: globalIsar)));
+        }
+      }
+    } else {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: const Text('Login failed. Please check credentials.'),
+          backgroundColor: Colors.red.shade600,
+        ));
+      }
     }
   }
 
@@ -77,7 +78,7 @@ class _AuthScreenState extends State<AuthScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  _isRegistering ? 'Warden Registration' : 'Warden Portal Login',
+                  'Warden Portal Login',
                   style: TextStyle(fontSize: 16, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
                 ),
                 const SizedBox(height: 40),
@@ -96,21 +97,6 @@ class _AuthScreenState extends State<AuthScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      if (_isRegistering) ...[
-                        _buildTextField(_nameController, 'Full Name', Icons.person_outline),
-                        const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            Expanded(child: _buildTextField(_hostelController, 'Hostel Name', Icons.apartment_outlined)),
-                            const SizedBox(width: 12),
-                            Expanded(child: _buildTextField(_blockController, 'Block', Icons.domain)),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        _buildTextField(_floorController, 'Floor Number', Icons.layers_outlined),
-                        const SizedBox(height: 16),
-                      ],
-                      
                       _buildTextField(_emailController, 'Warden Email', Icons.email_outlined, keyboardType: TextInputType.emailAddress),
                       const SizedBox(height: 16),
                       _buildTextField(_passwordController, 'Password', Icons.lock_outline, obscureText: true),
@@ -129,9 +115,9 @@ class _AuthScreenState extends State<AuthScreen> {
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                             elevation: 0,
                           ),
-                          child: Text(
-                            _isRegistering ? 'Create Account' : 'Sign In',
-                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          child: const Text(
+                            'Sign In',
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                           ),
                         ),
                     ],
@@ -140,20 +126,11 @@ class _AuthScreenState extends State<AuthScreen> {
                 
                 const SizedBox(height: 24),
                 
-                // Toggle Login/Register
-                TextButton(
-                  onPressed: () {
-                    setState(() {
-                      _isRegistering = !_isRegistering;
-                    });
-                  },
-                  style: TextButton.styleFrom(foregroundColor: primaryColor),
-                  child: Text(
-                    _isRegistering 
-                        ? 'Already have an account? Sign In' 
-                        : 'Need an account? Register',
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
+                // Contact Admin Text
+                Text(
+                  'Please contact the Administrator to create a Warden account.',
+                  style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+                  textAlign: TextAlign.center,
                 ),
               ],
             ),

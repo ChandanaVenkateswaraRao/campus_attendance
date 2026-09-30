@@ -92,14 +92,142 @@ const db = new sqlite3.Database(dbPath, (err) => {
         )
       `);
 
+      db.run(`
+        CREATE TABLE IF NOT EXISTS hostel_admins (
+          email TEXT PRIMARY KEY,
+          password TEXT,
+          hostel_name TEXT
+        )
+      `);
+
+      // Leaves and Outings tables
+      db.run(`
+        CREATE TABLE IF NOT EXISTS leaves (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          student_email TEXT,
+          from_date TEXT,
+          to_date TEXT,
+          status TEXT DEFAULT 'PENDING',
+          reason TEXT
+        )
+      `);
+      db.run(`
+        CREATE TABLE IF NOT EXISTS outings (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          student_email TEXT,
+          date TEXT,
+          start_time TEXT,
+          end_time TEXT,
+          status TEXT DEFAULT 'PENDING',
+          reason TEXT
+        )
+      `);
+
       db.run('ALTER TABLE cloud_students ADD COLUMN phone_number TEXT', () => {});
       db.run('ALTER TABLE cloud_students ADD COLUMN father_phone_number TEXT', () => {});
       db.run('ALTER TABLE cloud_students ADD COLUMN mother_phone_number TEXT', () => {});
       db.run('ALTER TABLE cloud_students ADD COLUMN email TEXT', () => {});
+      
+      // Ensure reason columns exist on existing DBs
+      db.run('ALTER TABLE leaves ADD COLUMN reason TEXT', () => {});
+      db.run('ALTER TABLE outings ADD COLUMN reason TEXT', () => {});
     });
   }
 });
 
+// --- Student Portal Routes ---
+app.post('/api/student/login', (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: 'Email required' });
+  
+  db.get('SELECT * FROM cloud_students WHERE email = ?', [email], (err, row) => {
+    if (err) return res.status(500).json({ error: err.message });
+    
+    if (!row) {
+      // Auto-register for testing purposes if not found
+      const mockName = email.split('@')[0];
+      const mockId = Math.floor(Math.random() * 100000).toString();
+      
+      db.run('INSERT INTO cloud_students (name, studentId, email, warden_email) VALUES (?, ?, ?, ?)', 
+        [mockName, mockId, email, 'warden@example.com'], 
+        function(insertErr) {
+          if (insertErr) return res.status(500).json({ error: insertErr.message });
+          
+          const newStudent = { email, name: mockName, studentId: mockId };
+          const token = jwt.sign({ email, role: 'student', studentId: mockId, name: mockName }, JWT_SECRET);
+          return res.json({ token, student: newStudent });
+      });
+      return;
+    }
+    
+    // Create a student token
+    const token = jwt.sign({ email, role: 'student', studentId: row.studentId, name: row.name }, JWT_SECRET);
+    res.json({ token, student: row });
+  });
+});
+
+app.post('/api/student/leave', authenticateToken, (req, res) => {
+  if (req.user.role !== 'student') return res.status(403).json({ error: 'Forbidden' });
+  const { from_date, to_date, reason } = req.body;
+  db.run('INSERT INTO leaves (student_email, from_date, to_date, reason) VALUES (?, ?, ?, ?)', 
+    [req.user.email, from_date, to_date, reason || ''], function(err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ success: true, message: 'Leave applied successfully' });
+  });
+});
+
+app.get('/api/student/leaves', authenticateToken, (req, res) => {
+  if (req.user.role !== 'student') return res.status(403).json({ error: 'Forbidden' });
+  db.all('SELECT * FROM leaves WHERE student_email = ? ORDER BY id DESC', [req.user.email], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
+});
+
+app.post('/api/student/outing', authenticateToken, (req, res) => {
+  if (req.user.role !== 'student') return res.status(403).json({ error: 'Forbidden' });
+  const { date, start_time, end_time, reason } = req.body;
+  db.run('INSERT INTO outings (student_email, date, start_time, end_time, reason) VALUES (?, ?, ?, ?, ?)', 
+    [req.user.email, date, start_time, end_time, reason || ''], function(err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ success: true, message: 'Outing applied successfully' });
+  });
+});
+
+app.get('/api/student/outings', authenticateToken, (req, res) => {
+  if (req.user.role !== 'student') return res.status(403).json({ error: 'Forbidden' });
+  db.all('SELECT * FROM outings WHERE student_email = ? ORDER BY id DESC', [req.user.email], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
+});
+
+app.get('/api/student/attendance', authenticateToken, (req, res) => {
+  if (req.user.role !== 'student') return res.status(403).json({ error: 'Forbidden' });
+  
+  db.all('SELECT * FROM attendance_records ORDER BY timestamp DESC', [], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    
+    // Map dates to attendance status
+    const dateMap = {};
+    
+    rows.forEach(row => {
+      const dateStr = row.timestamp.split('T')[0]; // Extract YYYY-MM-DD
+      const present = JSON.parse(row.present_students_json || '[]');
+      const isPresent = present.some(p => p.studentId === req.user.studentId || p.name === req.user.name);
+      
+      if (!dateMap[dateStr]) {
+        dateMap[dateStr] = { date: row.timestamp, status: isPresent ? 'Present' : 'Absent' };
+      } else if (isPresent) {
+        // If marked present in any record for this day, count as present
+        dateMap[dateStr].status = 'Present';
+      }
+    });
+    
+    const attendanceList = Object.values(dateMap).sort((a, b) => b.date.localeCompare(a.date));
+    res.json({ attendanceList });
+  });
+});
 
 
 // --- Auth Routes ---
@@ -244,6 +372,144 @@ app.post('/api/sync', (req, res) => {
   insertStmt.finalize();
 });
 
+// Admin Endpoints
+app.get('/api/admin/wardens', (req, res) => {
+  db.all('SELECT email, name, hostel_name, block_name, floor_number FROM wardens', [], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
+});
+
+app.put('/api/admin/wardens/:email', (req, res) => {
+  const email = req.params.email;
+  const { name, password, hostel_name, block_name, floor_number } = req.body;
+  
+  if (password && password.trim() !== '') {
+    const sql = 'UPDATE wardens SET name = ?, password = ?, hostel_name = ?, block_name = ?, floor_number = ? WHERE email = ?';
+    db.run(sql, [name, password, hostel_name, block_name, floor_number, email], function(err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ success: true, message: 'Warden updated successfully with new password.' });
+    });
+  } else {
+    const sql = 'UPDATE wardens SET name = ?, hostel_name = ?, block_name = ?, floor_number = ? WHERE email = ?';
+    db.run(sql, [name, hostel_name, block_name, floor_number, email], function(err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ success: true, message: 'Warden updated successfully.' });
+    });
+  }
+});
+
+app.put('/api/admin/students/:db_id', (req, res) => {
+  const db_id = req.params.db_id;
+  const { name, studentId, phone_number, email, father_phone_number, mother_phone_number } = req.body;
+  const sql = 'UPDATE cloud_students SET name=?, studentId=?, phone_number=?, email=?, father_phone_number=?, mother_phone_number=? WHERE id=?';
+  db.run(sql, [name, studentId, phone_number, email, father_phone_number, mother_phone_number, db_id], function(err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ success: true, message: 'Student updated successfully.' });
+  });
+});
+
+app.delete('/api/admin/students/:db_id', (req, res) => {
+  const db_id = req.params.db_id;
+  db.run('DELETE FROM cloud_students WHERE id=?', [db_id], function(err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ success: true, message: 'Student deleted successfully.' });
+  });
+});
+
+app.post('/api/admin/attendance/toggle', (req, res) => {
+  const { date, room_name, student } = req.body;
+  
+  db.get('SELECT * FROM attendance_records WHERE timestamp LIKE ? AND room_name = ? ORDER BY timestamp DESC LIMIT 1', [date + '%', room_name], (err, row) => {
+    if (err) return res.status(500).json({ error: err.message });
+    
+    if (row) {
+      let present = JSON.parse(row.present_students_json || '[]');
+      const isPresentIndex = present.findIndex(p => p.id === student.db_id || p.studentId === student.studentId || p.name === student.name);
+      
+      if (isPresentIndex > -1) {
+        present.splice(isPresentIndex, 1);
+      } else {
+        present.push({ id: student.db_id, name: student.name, studentId: student.studentId });
+      }
+      
+      db.run('UPDATE attendance_records SET present_students_json = ? WHERE id = ?', [JSON.stringify(present), row.id], function(updateErr) {
+         if (updateErr) return res.status(500).json({ error: updateErr.message });
+         res.json({ success: true, present: isPresentIndex === -1 });
+      });
+    } else {
+      const newTimestamp = `${date}T00:00:00.000Z`;
+      const present = [{ id: student.db_id, name: student.name, studentId: student.studentId }];
+      db.run('INSERT INTO attendance_records (room_name, timestamp, present_students_json) VALUES (?, ?, ?)', [room_name, newTimestamp, JSON.stringify(present)], function(insertErr) {
+         if (insertErr) return res.status(500).json({ error: insertErr.message });
+         res.json({ success: true, present: true });
+      });
+    }
+  });
+});
+
+app.delete('/api/admin/wardens/:email', (req, res) => {
+  const email = req.params.email;
+  db.serialize(() => {
+    db.run('BEGIN TRANSACTION');
+    db.run('DELETE FROM wardens WHERE email = ?', [email]);
+    db.run('DELETE FROM cloud_students WHERE warden_email = ?', [email]);
+    db.run('DELETE FROM cloud_rooms WHERE warden_email = ?', [email]);
+    db.run('DELETE FROM cloud_face_embeddings WHERE warden_email = ?', [email], function(err) {
+      if (err) {
+        db.run('ROLLBACK');
+        return res.status(500).json({ error: err.message });
+      }
+      db.run('COMMIT');
+      res.json({ success: true, message: 'Warden and associated data deleted.' });
+    });
+  });
+});
+
+app.get('/api/admin/detailed_students', (req, res) => {
+  const query = `
+    SELECT 
+      s.id as db_id, s.name, s.studentId, s.room_local_id, s.warden_email,
+      s.phone_number, s.father_phone_number, s.mother_phone_number, s.email,
+      w.hostel_name, w.block_name, w.floor_number,
+      r.name as room_name
+    FROM cloud_students s
+    LEFT JOIN wardens w ON s.warden_email = w.email
+    LEFT JOIN cloud_rooms r ON s.room_local_id = r.local_id AND s.warden_email = r.warden_email
+  `;
+  db.all(query, [], (err, students) => {
+    if (err) return res.status(500).json({ error: err.message });
+    
+    db.all('SELECT * FROM attendance_records ORDER BY timestamp DESC', [], (err, records) => {
+       if (err) return res.status(500).json({ error: err.message });
+       
+       const formattedRecords = records.map(row => ({
+         ...row,
+         present_students: JSON.parse(row.present_students_json || '[]')
+       }));
+       
+       res.json({ students, records: formattedRecords });
+    });
+  });
+});
+
+app.get('/api/admin/stats', (req, res) => {
+  const stats = { wardens: 0, records: 0, students: 0 };
+  
+  db.get('SELECT COUNT(*) as count FROM wardens', (err, row) => {
+    if (!err && row) stats.wardens = row.count;
+    
+    db.get('SELECT COUNT(*) as count FROM attendance_records', (err, row) => {
+      if (!err && row) stats.records = row.count;
+      
+      db.get('SELECT COUNT(*) as count FROM cloud_students', (err, row) => {
+        if (!err && row) stats.students = row.count;
+        res.json(stats);
+      });
+    });
+  });
+});
+
 // View Endpoint for testing
 app.get('/api/records', (req, res) => {
   db.all('SELECT * FROM attendance_records ORDER BY id DESC', [], (err, rows) => {
@@ -315,6 +581,170 @@ app.put('/api/attendance/:id', authenticateToken, (req, res) => {
       res.json({ message: 'Record updated successfully' });
     }
   );
+});
+
+// --- Leaves & Outings Management (Admin/Warden) ---
+app.get('/api/admin/leaves', (req, res) => {
+  const query = `
+    SELECT 
+      l.id, l.from_date, l.to_date, l.status, l.reason, l.student_email,
+      s.name as student_name, s.studentId as register_number, 
+      r.name as room_number,
+      w.email as warden_email, w.hostel_name, w.block_name, w.floor_number
+    FROM leaves l
+    JOIN cloud_students s ON l.student_email = s.email
+    LEFT JOIN wardens w ON s.warden_email = w.email
+    LEFT JOIN cloud_rooms r ON s.room_local_id = r.local_id AND s.warden_email = r.warden_email
+    ORDER BY l.id DESC
+  `;
+  db.all(query, [], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
+});
+
+app.put('/api/admin/leaves/:id/status', (req, res) => {
+  const { status } = req.body;
+  db.run('UPDATE leaves SET status = ? WHERE id = ?', [status, req.params.id], function(err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ success: true });
+  });
+});
+
+app.get('/api/admin/outings', (req, res) => {
+  const query = `
+    SELECT 
+      o.id, o.date, o.start_time, o.end_time, o.status, o.reason, o.student_email,
+      s.name as student_name, s.studentId as register_number, 
+      r.name as room_number,
+      w.email as warden_email, w.hostel_name, w.block_name, w.floor_number
+    FROM outings o
+    JOIN cloud_students s ON o.student_email = s.email
+    LEFT JOIN wardens w ON s.warden_email = w.email
+    LEFT JOIN cloud_rooms r ON s.room_local_id = r.local_id AND s.warden_email = r.warden_email
+    ORDER BY o.id DESC
+  `;
+  db.all(query, [], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
+});
+
+app.put('/api/admin/outings/:id/status', (req, res) => {
+  const { status } = req.body;
+  db.run('UPDATE outings SET status = ? WHERE id = ?', [status, req.params.id], function(err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ success: true });
+  });
+});
+
+// --- Warden Specific Endpoints (for Mobile App) ---
+app.get('/api/warden/leaves', authenticateToken, (req, res) => {
+  const query = `
+    SELECT 
+      l.id, l.from_date, l.to_date, l.status, l.reason, l.student_email,
+      s.name as student_name, s.studentId as register_number, 
+      r.name as room_number
+    FROM leaves l
+    JOIN cloud_students s ON l.student_email = s.email
+    LEFT JOIN cloud_rooms r ON s.room_local_id = r.local_id AND s.warden_email = r.warden_email
+    WHERE s.warden_email = ?
+    ORDER BY l.id DESC
+  `;
+  db.all(query, [req.user.email], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
+});
+
+app.put('/api/warden/leaves/:id/status', authenticateToken, (req, res) => {
+  const { status } = req.body;
+  db.run('UPDATE leaves SET status = ? WHERE id = ?', [status, req.params.id], function(err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ success: true });
+  });
+});
+
+app.get('/api/warden/outings', authenticateToken, (req, res) => {
+  const query = `
+    SELECT 
+      o.id, o.date, o.start_time, o.end_time, o.status, o.reason, o.student_email,
+      s.name as student_name, s.studentId as register_number, 
+      r.name as room_number
+    FROM outings o
+    JOIN cloud_students s ON o.student_email = s.email
+    LEFT JOIN cloud_rooms r ON s.room_local_id = r.local_id AND s.warden_email = r.warden_email
+    WHERE s.warden_email = ?
+    ORDER BY o.id DESC
+  `;
+  db.all(query, [req.user.email], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
+});
+
+app.put('/api/warden/outings/:id/status', authenticateToken, (req, res) => {
+  const { status } = req.body;
+  db.run('UPDATE outings SET status = ? WHERE id = ?', [status, req.params.id], function(err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ success: true });
+  });
+});
+
+// --- Hostel Admins CRUD ---
+app.get('/api/admin/hostel_admins', (req, res) => {
+  db.all('SELECT email, hostel_name FROM hostel_admins', (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
+});
+
+app.post('/api/admin/hostel_admins', (req, res) => {
+  const { email, password, hostel_name } = req.body;
+  db.run('INSERT INTO hostel_admins (email, password, hostel_name) VALUES (?, ?, ?)', [email, password, hostel_name], function(err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ success: true });
+  });
+});
+
+app.put('/api/admin/hostel_admins/:email', (req, res) => {
+  const { password, hostel_name } = req.body;
+  const email = req.params.email;
+  if (password) {
+    db.run('UPDATE hostel_admins SET password=?, hostel_name=? WHERE email=?', [password, hostel_name, email], function(err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ success: true });
+    });
+  } else {
+    db.run('UPDATE hostel_admins SET hostel_name=? WHERE email=?', [hostel_name, email], function(err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ success: true });
+    });
+  }
+});
+
+app.delete('/api/admin/hostel_admins/:email', (req, res) => {
+  const email = req.params.email;
+  db.run('DELETE FROM hostel_admins WHERE email=?', [email], function(err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ success: true });
+  });
+});
+
+// --- Login Route ---
+app.post('/api/admin/login', (req, res) => {
+  const { email, password } = req.body;
+  if (email === 'admin@klu.ac.in' && password === 'admin@klu.ac.in') {
+    return res.json({ success: true, role: 'super_admin', hostel_name: null });
+  }
+
+  db.get('SELECT * FROM hostel_admins WHERE email = ? AND password = ?', [email, password], (err, row) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (row) {
+      return res.json({ success: true, role: 'hostel_admin', hostel_name: row.hostel_name, email: row.email });
+    }
+    return res.status(401).json({ error: 'Invalid email or password' });
+  });
 });
 
 app.listen(PORT, () => {

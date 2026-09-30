@@ -15,6 +15,7 @@ class MlWorker {
   late final FaceDetector _faceDetector;
   final FaceRecognitionService _recognitionService = FaceRecognitionService();
   bool _isProcessing = false;
+  bool _isDisposed = false;
 
   MlWorker() {
     _faceDetector = FaceDetector(
@@ -32,7 +33,7 @@ class MlWorker {
   }
 
   Future<List<FaceWithEmbedding>> processImage(CameraImage image, int sensorOrientation) async {
-    if (_isProcessing) return [];
+    if (_isProcessing || _isDisposed) return [];
     _isProcessing = true;
 
     try {
@@ -95,6 +96,7 @@ class MlWorker {
       
       List<FaceWithEmbedding> results = [];
       for (var face in faces) {
+        if (_isDisposed) break;
         // Crop and run TFLite
         final rgbMatrix = _recognitionService.preprocessImage(bytes, width, height, face, sensorOrientation);
         List<double>? embedding;
@@ -114,6 +116,7 @@ class MlWorker {
   }
 
   void stop() {
+    _isDisposed = true;
     _faceDetector.close();
     _recognitionService.close();
   }

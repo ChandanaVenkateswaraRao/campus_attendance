@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class AuthService {
   // Use the local IP address for physical devices
-  static const String baseUrl = 'http://10.2.8.142:3000/api';
+  static const String baseUrl = 'http://10.131.73.51:3000/api';
 
   Future<bool> register(String email, String password, String name, String hostelName, String blockName, String floorNumber) async {
     try {

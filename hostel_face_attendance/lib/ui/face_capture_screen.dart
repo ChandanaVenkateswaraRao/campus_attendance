@@ -13,7 +13,11 @@ class FaceCaptureScreen extends StatefulWidget {
   final Isar isar;
   final Student student;
 
-  const FaceCaptureScreen({super.key, required this.isar, required this.student});
+  const FaceCaptureScreen({
+    super.key,
+    required this.isar,
+    required this.student,
+  });
 
   @override
   State<FaceCaptureScreen> createState() => _FaceCaptureScreenState();
@@ -22,7 +26,7 @@ class FaceCaptureScreen extends StatefulWidget {
 class _FaceCaptureScreenState extends State<FaceCaptureScreen> {
   final CameraService _cameraService = CameraService();
   final MlWorker _mlWorker = MlWorker();
-  
+
   bool _isInitializing = true;
   bool _faceDetected = false;
   List<FaceWithEmbedding> _faces = [];
@@ -41,7 +45,10 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen> {
   }
 
   void _processFrame(CameraImage image) async {
-    final faces = await _mlWorker.processImage(image, _cameraService.sensorOrientation);
+    final faces = await _mlWorker.processImage(
+      image,
+      _cameraService.sensorOrientation,
+    );
     if (mounted) {
       setState(() {
         _faces = faces;
@@ -65,17 +72,21 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen> {
   void _captureAngle() async {
     if (!_faceDetected || _faces.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No face detected. Please position the student in the frame.')),
+        const SnackBar(
+          content: Text(
+            'No face detected. Please position the student in the frame.',
+          ),
+        ),
       );
       return;
     }
-    
+
     // Check if we already have this embedding (optional duplicate check could go here)
     // For now, just add it.
     if (_faces.first.embedding != null) {
       _capturedEmbeddings.add(_faces.first.embedding!);
     }
-    
+
     setState(() {
       _capturedAngles++;
     });
@@ -83,13 +94,16 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen> {
     if (_capturedAngles >= _requiredAngles) {
       // Done capturing
       _cameraService.stopImageStream();
-      
+
       // Save
       final success = await _saveStudentToDatabase();
       if (mounted) {
         if (success) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Registration Complete! Data synced to server.'), backgroundColor: Colors.green),
+            const SnackBar(
+              content: Text('Registration Complete! Data synced to server.'),
+              backgroundColor: Colors.green,
+            ),
           );
           // Pop back to Student List
           Navigator.pop(context); // Pop FaceCaptureScreen
@@ -104,14 +118,21 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen> {
     if (connectivityResult.contains(ConnectivityResult.none)) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No internet connection. Cannot register offline.'), backgroundColor: Colors.red),
+          const SnackBar(
+            content: Text('No internet connection. Cannot register offline.'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
       return false;
     }
 
     if (mounted) {
-      showDialog(context: context, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator()));
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(child: CircularProgressIndicator()),
+      );
     }
 
     await widget.isar.writeTxn(() async {
@@ -137,13 +158,19 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen> {
     } catch (e) {
       // Rollback local changes
       await widget.isar.writeTxn(() async {
-        await widget.isar.faceEmbeddings.filter().student((q) => q.idEqualTo(widget.student.id)).deleteAll();
+        await widget.isar.faceEmbeddings
+            .filter()
+            .student((q) => q.idEqualTo(widget.student.id))
+            .deleteAll();
         await widget.isar.students.delete(widget.student.id);
       });
       if (mounted) {
         Navigator.pop(context); // Close loading dialog
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Server error during sync. Registration aborted.'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Server error during sync. Registration aborted.'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
       return false;
@@ -171,6 +198,16 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.flip_camera_ios, color: Colors.white),
+            onPressed: () async {
+              setState(() => _isInitializing = true);
+              await _cameraService.switchCamera(_processFrame);
+              if (mounted) setState(() => _isInitializing = false);
+            },
+          ),
+        ],
       ),
       body: Stack(
         fit: StackFit.expand,
@@ -178,15 +215,17 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen> {
           // Camera Preview
           CameraPreview(
             _cameraService.controller!,
-            child: _imageSize == null ? null : CustomPaint(
-              painter: FacePainter(
-                faces: _faces.map((e) => e.face).toList(),
-                imageSize: _imageSize!,
-                isFrontCamera: _cameraService.isFrontCamera,
-              ),
-            ),
+            child: _imageSize == null
+                ? null
+                : CustomPaint(
+                    painter: FacePainter(
+                      faces: _faces.map((e) => e.face).toList(),
+                      imageSize: _imageSize!,
+                      isFrontCamera: _cameraService.isFrontCamera,
+                    ),
+                  ),
           ),
-          
+
           // Modern Horizontal Zoom Bar
           Positioned(
             bottom: 160,
@@ -202,7 +241,7 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen> {
               },
             ),
           ),
-          
+
           Positioned(
             bottom: 20,
             left: 20,
@@ -219,7 +258,11 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen> {
                   Text(
                     'Capture multiple angles\n($_capturedAngles/$_requiredAngles completed)',
                     textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 16),
                   SizedBox(
@@ -241,7 +284,7 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen> {
                 ],
               ),
             ),
-          )
+          ),
         ],
       ),
     );

@@ -45,6 +45,7 @@ dependencies:
   shared_preferences: ^2.5.5
   connectivity_plus: ^7.3.1
   url_launcher: ^6.3.2
+  flutter_dotenv: ^6.0.1
 
 dev_dependencies:
   flutter_test:
@@ -80,6 +81,7 @@ flutter:
   assets:
     - assets/mobilefacenet.tflite
     - assets/images/logo.png
+    - .env
   #   - images/a_dot_ham.jpeg
 
   # An image asset can refer to one or more resolution-specific "variants", see

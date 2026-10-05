@@ -419,27 +419,48 @@ app.delete('/api/admin/students/:db_id', (req, res) => {
 
 app.post('/api/admin/attendance/toggle', (req, res) => {
   const { date, room_name, student } = req.body;
+  const targetId = student.local_id || student.db_id;
   
-  db.get('SELECT * FROM attendance_records WHERE timestamp LIKE ? AND room_name = ? ORDER BY timestamp DESC LIMIT 1', [date + '%', room_name], (err, row) => {
+  db.all('SELECT * FROM attendance_records WHERE timestamp LIKE ? AND room_name = ?', [date + '%', room_name], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     
-    if (row) {
-      let present = JSON.parse(row.present_students_json || '[]');
-      const isPresentIndex = present.findIndex(p => p.id === student.db_id || p.studentId === student.studentId || p.name === student.name);
-      
-      if (isPresentIndex > -1) {
-        present.splice(isPresentIndex, 1);
-      } else {
-        present.push({ id: student.db_id, name: student.name, studentId: student.studentId });
-      }
-      
-      db.run('UPDATE attendance_records SET present_students_json = ? WHERE id = ?', [JSON.stringify(present), row.id], function(updateErr) {
-         if (updateErr) return res.status(500).json({ error: updateErr.message });
-         res.json({ success: true, present: isPresentIndex === -1 });
+    if (rows && rows.length > 0) {
+      // Determine if they are currently present in ANY of the records
+      let isCurrentlyPresent = false;
+      rows.forEach(row => {
+        let present = JSON.parse(row.present_students_json || '[]');
+        if (present.some(p => p.id === targetId || p.id === student.db_id || p.id === student.local_id || p.studentId === student.studentId || p.name === student.name)) {
+          isCurrentlyPresent = true;
+        }
       });
+      
+      let updatePromises = [];
+      
+      rows.forEach(row => {
+        let present = JSON.parse(row.present_students_json || '[]');
+        if (isCurrentlyPresent) {
+          // Remove from all
+          present = present.filter(p => p.id !== targetId && p.id !== student.db_id && p.id !== student.local_id && p.studentId !== student.studentId && p.name !== student.name);
+        } else {
+          // Add to all
+          present.push({ id: targetId, name: student.name, studentId: student.studentId });
+        }
+        
+        updatePromises.push(new Promise((resolve, reject) => {
+          db.run('UPDATE attendance_records SET present_students_json = ? WHERE id = ?', [JSON.stringify(present), row.id], function(updateErr) {
+            if (updateErr) reject(updateErr);
+            else resolve();
+          });
+        }));
+      });
+      
+      Promise.all(updatePromises)
+        .then(() => res.json({ success: true, present: !isCurrentlyPresent }))
+        .catch(updateErr => res.status(500).json({ error: updateErr.message }));
+        
     } else {
       const newTimestamp = `${date}T00:00:00.000Z`;
-      const present = [{ id: student.db_id, name: student.name, studentId: student.studentId }];
+      const present = [{ id: targetId, name: student.name, studentId: student.studentId }];
       db.run('INSERT INTO attendance_records (room_name, timestamp, present_students_json) VALUES (?, ?, ?)', [room_name, newTimestamp, JSON.stringify(present)], function(insertErr) {
          if (insertErr) return res.status(500).json({ error: insertErr.message });
          res.json({ success: true, present: true });
@@ -469,7 +490,7 @@ app.delete('/api/admin/wardens/:email', (req, res) => {
 app.get('/api/admin/detailed_students', (req, res) => {
   const query = `
     SELECT 
-      s.id as db_id, s.name, s.studentId, s.room_local_id, s.warden_email,
+      s.id as db_id, s.local_id, s.name, s.studentId, s.room_local_id, s.warden_email,
       s.phone_number, s.father_phone_number, s.mother_phone_number, s.email,
       w.hostel_name, w.block_name, w.floor_number,
       r.name as room_name

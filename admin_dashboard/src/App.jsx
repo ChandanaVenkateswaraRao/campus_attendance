@@ -4,6 +4,7 @@ import { BrowserRouter as Router, Routes, Route, Link, useNavigate, useLocation 
 import { LayoutDashboard, Users, ClipboardList, LogOut, Search, RefreshCw, X, Building, Grid, Layers, Hash, Calendar, GraduationCap, Edit2, Trash2 } from 'lucide-react';
 import toast, { Toaster } from 'react-hot-toast';
 import LeavesAndOutings from './LeavesAndOutings';
+import Report from './Report';
 
 const API_BASE = 'http://localhost:3000/api';
 
@@ -137,18 +138,20 @@ function Dashboard({ user }) {
   for (let i = 0; i < daysCount; i++) {
     const d = new Date();
     d.setDate(d.getDate() - i);
-    dates.push(d.toISOString().split('T')[0]);
+    const localDate = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    dates.push(localDate);
   }
 
   const getAttendanceStatus = (student, dateStr) => {
-    const dailyRecords = allRecords.filter(r => r.timestamp.startsWith(dateStr) && (r.room_name === student.room_name || r.room_name === undefined));
+    const sRoom = student.room_name || 'unknown';
+    const dailyRecords = allRecords.filter(r => r.timestamp.startsWith(dateStr) && (r.room_name === sRoom));
     if (dailyRecords.length === 0) return 'NO_DATA';
 
     for (const record of dailyRecords) {
       if (!record.present_students) continue;
       const found = record.present_students.some(p => {
         if (typeof p === 'string') return p === student.studentId || p === student.name;
-        return p.studentId === student.studentId || p.id === student.db_id || p.name === student.name;
+        return p.studentId === student.studentId || p.id === student.local_id || p.id === student.db_id || p.name === student.name;
       });
       if (found) return 'PRESENT';
     }
@@ -171,7 +174,7 @@ function Dashboard({ user }) {
         await axios.post(`${API_BASE}/admin/attendance/toggle`, {
           date,
           room_name: student.room_name || 'unknown',
-          student: { db_id: student.db_id, studentId: student.studentId, name: student.name }
+          student: { db_id: student.db_id, local_id: student.local_id, studentId: student.studentId, name: student.name }
         });
         toast.success(`Attendance updated for ${student.name}`);
         fetchData(); // Refresh the table
@@ -714,6 +717,9 @@ function Sidebar({ onLogout, user }) {
   if (user?.role === 'super_admin') {
     navItems.push({ path: '/wardens', label: 'Wardens', icon: Users });
     navItems.push({ path: '/hostel-admins', label: 'Hostel Admins', icon: Building });
+    navItems.push({ path: '/report', label: 'Report', icon: ClipboardList });
+  } else if (user?.role === 'hostel_admin') {
+    navItems.push({ path: '/report', label: 'Report', icon: ClipboardList });
   }
 
   return (
@@ -1039,6 +1045,7 @@ function App() {
                 <Route path="/" element={<Dashboard user={user} />} />
                 <Route path="/students" element={<StudentDetails user={user} />} />
                 <Route path="/requests" element={<LeavesAndOutings user={user} />} />
+                <Route path="/report" element={<Report user={user} />} />
                 {user.role === 'super_admin' && (
                   <>
                     <Route path="/wardens" element={<Wardens />} />

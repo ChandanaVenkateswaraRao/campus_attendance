@@ -2,9 +2,11 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../env.dart';
+
 class AuthService {
   // Use the local IP address for physical devices
-  static const String baseUrl = 'http://10.131.73.51:3000/api';
+  static String get baseUrl => '${Env.apiBaseUrl}/api';
 
   Future<bool> register(String email, String password, String name, String hostelName, String blockName, String floorNumber) async {
     try {

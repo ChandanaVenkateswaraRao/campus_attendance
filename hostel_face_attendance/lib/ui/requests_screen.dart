@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../services/auth_service.dart';
+import '../env.dart';
 
 class RequestsScreen extends StatefulWidget {
   const RequestsScreen({Key? key}) : super(key: key);
@@ -30,11 +31,11 @@ class _RequestsScreenState extends State<RequestsScreen> with SingleTickerProvid
       if (token == null) throw Exception('Not logged in');
 
       final leavesRes = await http.get(
-        Uri.parse('http://10.131.73.51:3000/api/warden/leaves'),
+        Uri.parse('${Env.apiBaseUrl}/api/warden/leaves'),
         headers: {'Authorization': 'Bearer $token'},
       );
       final outingsRes = await http.get(
-        Uri.parse('http://10.131.73.51:3000/api/warden/outings'),
+        Uri.parse('${Env.apiBaseUrl}/api/warden/outings'),
         headers: {'Authorization': 'Bearer $token'},
       );
 
@@ -57,7 +58,7 @@ class _RequestsScreenState extends State<RequestsScreen> with SingleTickerProvid
     try {
       final token = await AuthService().getToken();
       final response = await http.put(
-        Uri.parse('http://10.131.73.51:3000/api/warden/$type/$id/status'),
+        Uri.parse('${Env.apiBaseUrl}/api/warden/$type/$id/status'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',

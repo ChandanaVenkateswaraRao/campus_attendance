@@ -402,6 +402,16 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         elevation: 0,
         centerTitle: true,
         iconTheme: const IconThemeData(color: Colors.white),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.flip_camera_ios, color: Colors.white),
+            onPressed: () async {
+              setState(() => _isInitializing = true);
+              await _cameraService.switchCamera(_processFrame);
+              if (mounted) setState(() => _isInitializing = false);
+            },
+          ),
+        ],
       ),
       body: Stack(
         children: [

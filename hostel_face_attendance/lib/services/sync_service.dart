@@ -3,12 +3,13 @@ import 'package:http/http.dart' as http;
 import 'package:isar/isar.dart';
 import '../models/models.dart';
 import 'auth_service.dart';
+import '../env.dart';
 
 class SyncService {
   final Isar isar;
   // Replace with your local machine's IP address if testing on a physical device,
   // or use 10.0.2.2 if testing on Android Emulator
-  final String backendUrl = 'http://10.131.73.51:3000/api/sync';
+  final String backendUrl = '${Env.apiBaseUrl}/api/sync';
 
   SyncService(this.isar);
 
@@ -20,7 +21,7 @@ class SyncService {
     final dateString = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
     
     final response = await http.get(
-      Uri.parse('http://10.131.73.51:3000/api/attendance?date=$dateString'),
+      Uri.parse('${Env.apiBaseUrl}/api/attendance?date=$dateString'),
       headers: {'Authorization': 'Bearer $token'},
     ).timeout(const Duration(seconds: 10));
 
@@ -127,7 +128,7 @@ class SyncService {
     };
 
     final response = await http.post(
-      Uri.parse('http://10.131.73.51:3000/api/backup'),
+      Uri.parse('${Env.apiBaseUrl}/api/backup'),
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token'
@@ -145,7 +146,7 @@ class SyncService {
     if (token == null) throw Exception('Not logged in');
 
     final response = await http.get(
-      Uri.parse('http://10.131.73.51:3000/api/restore'),
+      Uri.parse('${Env.apiBaseUrl}/api/restore'),
       headers: {'Authorization': 'Bearer $token'},
     ).timeout(const Duration(seconds: 30));
 
@@ -230,7 +231,7 @@ class SyncService {
     };
 
     final response = await http.put(
-      Uri.parse('http://10.131.73.51:3000/api/attendance/$recordId'),
+      Uri.parse('${Env.apiBaseUrl}/api/attendance/$recordId'),
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token'
@@ -249,7 +250,7 @@ class SyncService {
     if (token == null) return [];
     try {
       final res = await http.get(
-        Uri.parse('http://10.131.73.51:3000/api/warden/leaves'),
+        Uri.parse('${Env.apiBaseUrl}/api/warden/leaves'),
         headers: {'Authorization': 'Bearer $token'},
       ).timeout(const Duration(seconds: 10));
       if (res.statusCode == 200) {

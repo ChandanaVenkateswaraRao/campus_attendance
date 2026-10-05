@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 import 'models/models.dart';
 import 'ui/home_screen.dart';
 import 'ui/auth_screen.dart';
@@ -12,6 +14,7 @@ late Isar globalIsar;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load(fileName: ".env");
   
   final dir = await getApplicationDocumentsDirectory();
   globalIsar = await Isar.open(

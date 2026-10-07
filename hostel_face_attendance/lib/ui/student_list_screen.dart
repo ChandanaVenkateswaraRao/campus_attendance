@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
 import '../models/models.dart';
 import 'registration_screen.dart';
+import 'face_capture_screen.dart';
 
 class StudentListScreen extends StatefulWidget {
   final Isar isar;
@@ -27,6 +28,11 @@ class _StudentListScreenState extends State<StudentListScreen> {
         .filter()
         .room((q) => q.idEqualTo(widget.room.id))
         .findAll();
+
+    for (var s in students) {
+      await s.faceEmbeddings.load();
+    }
+
     setState(() {
       _students = students;
     });
@@ -36,7 +42,8 @@ class _StudentListScreenState extends State<StudentListScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => RegistrationScreen(isar: widget.isar, room: widget.room),
+        builder: (context) =>
+            RegistrationScreen(isar: widget.isar, room: widget.room),
       ),
     ).then((_) {
       _loadStudents(); // Refresh when returning
@@ -58,10 +65,16 @@ class _StudentListScreenState extends State<StudentListScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.group_off_outlined, size: 64, color: Colors.grey.shade400),
+                  Icon(
+                    Icons.group_off_outlined,
+                    size: 64,
+                    color: Colors.grey.shade400,
+                  ),
                   const SizedBox(height: 16),
-                  Text('No students registered in this room', 
-                      style: TextStyle(color: Colors.grey.shade600, fontSize: 16)),
+                  Text(
+                    'No students registered in this room',
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
+                  ),
                 ],
               ),
             )
@@ -73,31 +86,65 @@ class _StudentListScreenState extends State<StudentListScreen> {
                 return Card(
                   margin: const EdgeInsets.only(bottom: 12),
                   elevation: 0,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
                   child: ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 8,
+                    ),
                     leading: CircleAvatar(
-                      backgroundColor: Colors.teal.withOpacity(0.1),
-                      child: const Icon(Icons.person, color: Colors.teal),
+                      backgroundColor: student.faceEmbeddings.isEmpty
+                          ? Colors.orange.withOpacity(0.1)
+                          : Colors.teal.withOpacity(0.1),
+                      child: Icon(
+                        student.faceEmbeddings.isEmpty
+                            ? Icons.camera_alt
+                            : Icons.person,
+                        color: student.faceEmbeddings.isEmpty
+                            ? Colors.orange
+                            : Colors.teal,
+                      ),
                     ),
                     title: Text(
                       student.name,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                      ),
                     ),
                     subtitle: Text('ID: ${student.studentId}'),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         IconButton(
-                          icon: const Icon(Icons.edit_outlined, color: Colors.blueAccent),
+                          icon: const Icon(
+                            Icons.edit_outlined,
+                            color: Colors.blueAccent,
+                          ),
                           onPressed: () => _showEditDialog(student),
                         ),
                         IconButton(
-                          icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                          icon: const Icon(
+                            Icons.delete_outline,
+                            color: Colors.redAccent,
+                          ),
                           onPressed: () => _confirmDelete(student),
                         ),
                       ],
                     ),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => FaceCaptureScreen(
+                            isar: widget.isar,
+                            student: student,
+                          ),
+                        ),
+                      ).then((_) => _loadStudents());
+                    },
                   ),
                 );
               },
@@ -116,14 +163,19 @@ class _StudentListScreenState extends State<StudentListScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Student'),
-        content: Text('Are you sure you want to remove ${student.name} from this room? This action cannot be undone.'),
+        content: Text(
+          'Are you sure you want to remove ${student.name} from this room? This action cannot be undone.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
             onPressed: () => Navigator.pop(context, true),
             child: const Text('Delete'),
           ),
@@ -159,8 +211,12 @@ class _StudentListScreenState extends State<StudentListScreen> {
     final nameCtrl = TextEditingController(text: student.name);
     final regCtrl = TextEditingController(text: student.studentId);
     final phoneCtrl = TextEditingController(text: student.phoneNumber);
-    final fatherPhoneCtrl = TextEditingController(text: student.fatherPhoneNumber);
-    final motherPhoneCtrl = TextEditingController(text: student.motherPhoneNumber);
+    final fatherPhoneCtrl = TextEditingController(
+      text: student.fatherPhoneNumber,
+    );
+    final motherPhoneCtrl = TextEditingController(
+      text: student.motherPhoneNumber,
+    );
     final emailCtrl = TextEditingController(text: student.email);
 
     await showDialog(
@@ -171,12 +227,30 @@ class _StudentListScreenState extends State<StudentListScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Name')),
-              TextField(controller: regCtrl, decoration: const InputDecoration(labelText: 'Registration No')),
-              TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'Phone')),
-              TextField(controller: emailCtrl, decoration: const InputDecoration(labelText: 'Email')),
-              TextField(controller: fatherPhoneCtrl, decoration: const InputDecoration(labelText: 'Father Phone')),
-              TextField(controller: motherPhoneCtrl, decoration: const InputDecoration(labelText: 'Mother Phone')),
+              TextField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(labelText: 'Name'),
+              ),
+              TextField(
+                controller: regCtrl,
+                decoration: const InputDecoration(labelText: 'Registration No'),
+              ),
+              TextField(
+                controller: phoneCtrl,
+                decoration: const InputDecoration(labelText: 'Phone'),
+              ),
+              TextField(
+                controller: emailCtrl,
+                decoration: const InputDecoration(labelText: 'Email'),
+              ),
+              TextField(
+                controller: fatherPhoneCtrl,
+                decoration: const InputDecoration(labelText: 'Father Phone'),
+              ),
+              TextField(
+                controller: motherPhoneCtrl,
+                decoration: const InputDecoration(labelText: 'Mother Phone'),
+              ),
             ],
           ),
         ),

@@ -5,12 +5,17 @@ import '../models/models.dart';
 import '../services/sync_service.dart';
 import 'student_list_screen.dart';
 import 'attendance_screen.dart';
+import 'excel_import_screen.dart';
 
 class RoomListScreen extends StatefulWidget {
   final Isar isar;
   final bool isAttendanceMode;
 
-  const RoomListScreen({super.key, required this.isar, required this.isAttendanceMode});
+  const RoomListScreen({
+    super.key,
+    required this.isar,
+    required this.isAttendanceMode,
+  });
 
   @override
   State<RoomListScreen> createState() => _RoomListScreenState();
@@ -29,26 +34,37 @@ class _RoomListScreenState extends State<RoomListScreen> {
 
   Future<void> _loadRooms() async {
     final rooms = await widget.isar.rooms.where().findAll();
-    
+
     Map<int, String> stats = {};
     if (widget.isAttendanceMode) {
       final today = DateTime.now();
       final startOfDay = DateTime(today.year, today.month, today.day);
-      final endOfDay = DateTime(today.year, today.month, today.day, 23, 59, 59, 999);
-      
+      final endOfDay = DateTime(
+        today.year,
+        today.month,
+        today.day,
+        23,
+        59,
+        59,
+        999,
+      );
+
       for (var room in rooms) {
         final record = await widget.isar.attendanceRecords
-          .filter()
-          .room((q) => q.idEqualTo(room.id))
-          .timestampBetween(startOfDay, endOfDay)
-          .findFirst();
-          
+            .filter()
+            .room((q) => q.idEqualTo(room.id))
+            .timestampBetween(startOfDay, endOfDay)
+            .findFirst();
+
         if (record != null) {
-           await record.presentStudents.load();
-           final presentCount = record.presentStudents.length;
-           final totalStudents = await widget.isar.students.filter().room((q) => q.idEqualTo(room.id)).count();
-           final absentCount = totalStudents - presentCount;
-           stats[room.id] = 'Present: $presentCount | Absent: $absentCount';
+          await record.presentStudents.load();
+          final presentCount = record.presentStudents.length;
+          final totalStudents = await widget.isar.students
+              .filter()
+              .room((q) => q.idEqualTo(room.id))
+              .count();
+          final absentCount = totalStudents - presentCount;
+          stats[room.id] = 'Present: $presentCount | Absent: $absentCount';
         }
       }
     }
@@ -91,36 +107,56 @@ class _RoomListScreenState extends State<RoomListScreen> {
     );
 
     if (name != null) {
-      final existing = await widget.isar.rooms.filter().nameEqualTo(name).findFirst();
+      final existing = await widget.isar.rooms
+          .filter()
+          .nameEqualTo(name)
+          .findFirst();
       if (existing != null) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Room already exists')));
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Room already exists')));
         }
         return;
       }
-      
+
       final connectivityResult = await Connectivity().checkConnectivity();
       if (connectivityResult.contains(ConnectivityResult.none)) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No internet connection. Cannot create room offline.')));
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'No internet connection. Cannot create room offline.',
+              ),
+            ),
+          );
         }
         return;
       }
 
       if (mounted) {
-        showDialog(context: context, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator()));
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => const Center(child: CircularProgressIndicator()),
+        );
       }
 
       final newRoom = Room()..name = name;
       await widget.isar.writeTxn(() async {
         await widget.isar.rooms.put(newRoom);
       });
-      
+
       try {
         await SyncService(widget.isar).backupToCloud();
         if (mounted) {
           Navigator.pop(context); // close dialog
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Room created successfully.'), backgroundColor: Colors.green));
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Room created successfully.'),
+              backgroundColor: Colors.green,
+            ),
+          );
           _loadRooms();
         }
       } catch (e) {
@@ -129,7 +165,12 @@ class _RoomListScreenState extends State<RoomListScreen> {
         });
         if (mounted) {
           Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Server error. Room creation aborted.'), backgroundColor: Colors.red));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Server error. Room creation aborted.'),
+              backgroundColor: Colors.red,
+            ),
+          );
         }
       }
     }
@@ -147,7 +188,8 @@ class _RoomListScreenState extends State<RoomListScreen> {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => StudentListScreen(isar: widget.isar, room: room),
+          builder: (context) =>
+              StudentListScreen(isar: widget.isar, room: room),
         ),
       ).then((_) => _loadRooms());
     }
@@ -158,7 +200,9 @@ class _RoomListScreenState extends State<RoomListScreen> {
     return Scaffold(
       backgroundColor: Colors.grey.shade100,
       appBar: AppBar(
-        title: Text(widget.isAttendanceMode ? 'Select Room to Scan' : 'Manage Rooms'),
+        title: Text(
+          widget.isAttendanceMode ? 'Select Room to Scan' : 'Manage Rooms',
+        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
@@ -168,9 +212,16 @@ class _RoomListScreenState extends State<RoomListScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.meeting_room_outlined, size: 64, color: Colors.grey.shade400),
+                  Icon(
+                    Icons.meeting_room_outlined,
+                    size: 64,
+                    color: Colors.grey.shade400,
+                  ),
                   const SizedBox(height: 16),
-                  Text('No rooms found', style: TextStyle(color: Colors.grey.shade600, fontSize: 18)),
+                  Text(
+                    'No rooms found',
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 18),
+                  ),
                 ],
               ),
             )
@@ -182,19 +233,38 @@ class _RoomListScreenState extends State<RoomListScreen> {
                 return Card(
                   margin: const EdgeInsets.only(bottom: 12),
                   elevation: 0,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
                   child: ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 8,
+                    ),
                     leading: CircleAvatar(
                       backgroundColor: Colors.blueAccent.withOpacity(0.1),
-                      child: const Icon(Icons.meeting_room, color: Colors.blueAccent),
+                      child: const Icon(
+                        Icons.meeting_room,
+                        color: Colors.blueAccent,
+                      ),
                     ),
                     title: Text(
                       'Room ${room.name}',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                      ),
                     ),
-                    subtitle: widget.isAttendanceMode && _roomStats.containsKey(room.id)
-                        ? Text(_roomStats[room.id]!, style: TextStyle(color: Colors.green.shade700, fontWeight: FontWeight.bold))
+                    subtitle:
+                        widget.isAttendanceMode &&
+                            _roomStats.containsKey(room.id)
+                        ? Text(
+                            _roomStats[room.id]!,
+                            style: TextStyle(
+                              color: Colors.green.shade700,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          )
                         : null,
                     trailing: const Icon(Icons.chevron_right_rounded),
                     onTap: () => _onRoomTapped(room),
@@ -202,11 +272,34 @@ class _RoomListScreenState extends State<RoomListScreen> {
                 );
               },
             ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _addRoom,
-        icon: const Icon(Icons.add),
-        label: const Text('Add Room'),
-        backgroundColor: Colors.blueAccent,
+      floatingActionButton: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          if (!widget.isAttendanceMode) ...[
+            FloatingActionButton.extended(
+              heroTag: 'importExcel',
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ExcelImportScreen(isar: widget.isar),
+                  ),
+                ).then((_) => _loadRooms());
+              },
+              icon: const Icon(Icons.table_chart),
+              label: const Text('Import Excel'),
+              backgroundColor: Colors.green,
+            ),
+            const SizedBox(height: 16),
+          ],
+          FloatingActionButton.extended(
+            heroTag: 'addRoom',
+            onPressed: _addRoom,
+            icon: const Icon(Icons.add),
+            label: const Text('Add Room'),
+            backgroundColor: Colors.blueAccent,
+          ),
+        ],
       ),
     );
   }
